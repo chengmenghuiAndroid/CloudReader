@@ -1,11 +1,14 @@
 package com.example.jingbin.cloudreader.viewmodel.gank;
 
-import android.arch.lifecycle.ViewModel;
+import android.app.Application;
+import android.arch.lifecycle.AndroidViewModel;
+import android.arch.lifecycle.MutableLiveData;
+import android.support.annotation.NonNull;
 
 import com.example.jingbin.cloudreader.app.CloudReaderApplication;
 import com.example.jingbin.cloudreader.app.Constants;
-import com.example.jingbin.cloudreader.base.BaseFragment;
 import com.example.jingbin.cloudreader.bean.AndroidBean;
+import com.example.jingbin.cloudreader.bean.BannerItemBean;
 import com.example.jingbin.cloudreader.bean.FrontpageBean;
 import com.example.jingbin.cloudreader.data.model.EverydayModel;
 import com.example.jingbin.cloudreader.http.RequestImpl;
@@ -16,40 +19,97 @@ import com.example.jingbin.cloudreader.utils.TimeUtil;
 import java.util.ArrayList;
 import java.util.List;
 
-import rx.Subscription;
+import io.reactivex.disposables.Disposable;
 
 /**
  * @author jingbin
  * @data 2017/12/15
  */
+public class EverydayViewModel extends AndroidViewModel {
 
-public class EverydayViewModel extends ViewModel {
-
-    private final EverydayModel mEverydayModel;
-    private final ACache maCache;
-    private EverydayNavigator everydayNavigator;
-    private BaseFragment activity;
+    private EverydayModel mEverydayModel;
+    private ACache maCache;
     private ArrayList<List<AndroidBean>> mLists;
     private ArrayList<String> mBannerImages;
-    private String year = getTodayTime().get(0);
-    private String month = getTodayTime().get(1);
-    private String day = getTodayTime().get(2);
+    private String year;
+    private String month;
+    private String day;
+    private BannerDataBean bannerDataBean = new BannerDataBean();
+    // 是否是上一天的请求
+    private boolean isOldDayRequest;
+    // 是否已经展示了数据
+    private boolean isHaveData = false;
 
-    public void setEverydayNavigator(EverydayNavigator everydayNavigator) {
-        this.everydayNavigator = everydayNavigator;
+    private final MutableLiveData<Boolean> isShowLoading = new MutableLiveData<>();
+    private final MutableLiveData<BannerDataBean> bannerData = new MutableLiveData<>();
+    private final MutableLiveData<ArrayList<List<AndroidBean>>> contentData = new MutableLiveData<>();
+
+    public MutableLiveData<Boolean> getShowLoading() {
+        return isShowLoading;
     }
 
-    public void onDestroy() {
-        everydayNavigator = null;
+    public MutableLiveData<BannerDataBean> getBannerData() {
+        return bannerData;
     }
 
-    public EverydayViewModel(BaseFragment activity) {
-        this.activity = activity;
+    public MutableLiveData<ArrayList<List<AndroidBean>>> getContentData() {
+        return contentData;
+    }
+
+    public EverydayViewModel(@NonNull Application application) {
+        super(application);
         maCache = ACache.get(CloudReaderApplication.getInstance());
         mEverydayModel = new EverydayModel();
-        mEverydayModel.setData(getTodayTime().get(0), getTodayTime().get(1), getTodayTime().get(2));
+        year = getTodayTime().get(0);
+        month = getTodayTime().get(1);
+        day = getTodayTime().get(2);
+        mEverydayModel.setData(year, month, day);
     }
 
+    /**
+     * 最后请求的时间是否是今天：
+     * 不是：
+     * ---- 大于12:30：请求数据，保存时间为今天
+     * ---- 小于12:30: 取缓存，没有数据请求数据，保存时间为之前的时间
+     * 是：
+     * ---- 已经展示数据 - 不处理
+     * ---- 没有展示数据 - 使用缓存
+     */
+    public void loadData() {
+        String oneData = SPUtils.getString("everyday_data", "2016-11-26");
+        if (!oneData.equals(TimeUtil.getData())) {
+            // 不是今天
+            isShowLoading.setValue(true);
+            if (TimeUtil.isRightTime()) {
+                //大于12：30,请求
+                isOldDayRequest = false;
+                mEverydayModel.setData(getTodayTime().get(0), getTodayTime().get(1), getTodayTime().get(2));
+                showBannerPage();
+                showRecyclerViewData();
+
+            } else {
+                // 小于，取缓存没有请求前一天
+                ArrayList<String> lastTime = TimeUtil.getLastTime(getTodayTime().get(0), getTodayTime().get(1), getTodayTime().get(2));
+                mEverydayModel.setData(lastTime.get(0), lastTime.get(1), lastTime.get(2));
+                year = lastTime.get(0);
+                month = lastTime.get(1);
+                day = lastTime.get(2);
+                // 是昨天
+                isOldDayRequest = true;
+                handleCache();
+            }
+        } else {
+            /** 当天：是否已经显示数据；是 不处理，否 取缓存没有请求当天*/
+            isOldDayRequest = false;
+            if (!isHaveData) {
+                handleCache();
+            }
+        }
+    }
+
+    /**
+     * 内容部分
+     */
     private void showRecyclerViewData() {
         mEverydayModel.showRecyclerViewData(new RequestImpl() {
             @Override
@@ -59,13 +119,15 @@ public class EverydayViewModel extends ViewModel {
                 }
                 mLists = (ArrayList<List<AndroidBean>>) object;
                 if (mLists.size() > 0 && mLists.get(0).size() > 0) {
-                    everydayNavigator.showListView(mLists);
                     maCache.remove(Constants.EVERYDAY_CONTENT);
                     maCache.put(Constants.EVERYDAY_CONTENT, mLists);
+                    saveDate();
+                    contentData.setValue(mLists);
                 } else {
-                    mLists = (ArrayList<List<AndroidBean>>) ACache.get(activity.getContext()).getAsObject(Constants.EVERYDAY_CONTENT);
+                    mLists = (ArrayList<List<AndroidBean>>) maCache.getAsObject(Constants.EVERYDAY_CONTENT);
                     if (mLists != null && mLists.size() > 0) {
-                        everydayNavigator.showListView(mLists);
+                        saveDate();
+                        contentData.setValue(mLists);
                     } else {
                         // 一直请求，直到请求到数据为止
                         ArrayList<String> lastTime = TimeUtil.getLastTime(year, month, day);
@@ -87,43 +149,34 @@ public class EverydayViewModel extends ViewModel {
             }
 
             @Override
-            public void addSubscription(Subscription subscription) {
-                activity.addSubscription(subscription);
+            public void addSubscription(Disposable subscription) {
             }
         });
     }
 
-    private void handleNoData(){
-        mLists = (ArrayList<List<AndroidBean>>) ACache.get(activity.getContext()).getAsObject(Constants.EVERYDAY_CONTENT);
-        if (mLists != null && mLists.size() > 0) {
-            everydayNavigator.showListView(mLists);
-        } else {
-            everydayNavigator.showErrorView();
-        }
-    }
-
-    private void showBanncerPage() {
-        mEverydayModel.showBanncerPage(new RequestImpl() {
+    /**
+     * banner数据
+     */
+    private void showBannerPage() {
+        mEverydayModel.showBannerPage(new RequestImpl() {
             @Override
             public void loadSuccess(Object object) {
-                if (mBannerImages == null) {
-                    mBannerImages = new ArrayList<String>();
-                } else {
-                    mBannerImages.clear();
-                }
                 FrontpageBean bean = (FrontpageBean) object;
                 if (bean != null && bean.getResult() != null && bean.getResult().getFocus() != null && bean.getResult().getFocus().getResult() != null) {
-                    final ArrayList<FrontpageBean.ResultBannerBean.FocusBean.ResultBeanX> result = (ArrayList<FrontpageBean.ResultBannerBean.FocusBean.ResultBeanX>) bean.getResult().getFocus().getResult();
+                    final ArrayList<BannerItemBean> result = (ArrayList<BannerItemBean>) bean.getResult().getFocus().getResult();
+                    ArrayList<String> mBannerImages = new ArrayList<String>();
                     if (result != null && result.size() > 0) {
                         for (int i = 0; i < result.size(); i++) {
                             //获取所有图片
                             mBannerImages.add(result.get(i).getRandpic());
                         }
-                        everydayNavigator.showBannerView(mBannerImages, result);
                         maCache.remove(Constants.BANNER_PIC);
                         maCache.put(Constants.BANNER_PIC, mBannerImages);
                         maCache.remove(Constants.BANNER_PIC_DATA);
                         maCache.put(Constants.BANNER_PIC_DATA, result);
+                        bannerDataBean.setData(mBannerImages, result);
+
+                        bannerData.setValue(bannerDataBean);
                     }
                 }
             }
@@ -134,62 +187,59 @@ public class EverydayViewModel extends ViewModel {
             }
 
             @Override
-            public void addSubscription(Subscription subscription) {
-                activity.addSubscription(subscription);
+            public void addSubscription(Disposable subscription) {
             }
         });
     }
 
-    public void handleCache() {
-        ArrayList<FrontpageBean.ResultBannerBean.FocusBean.ResultBeanX> result = null;
+    private void handleNoData() {
+        mLists = (ArrayList<List<AndroidBean>>) maCache.getAsObject(Constants.EVERYDAY_CONTENT);
+        if (mLists != null && mLists.size() > 0) {
+            saveDate();
+            contentData.setValue(mLists);
+        } else {
+            isShowLoading.setValue(false);
+            contentData.setValue(null);
+        }
+    }
+
+    private void handleCache() {
+        ArrayList<BannerItemBean> result = null;
+        ArrayList<String> mBannerImages = null;
         try {
             mBannerImages = (ArrayList<String>) maCache.getAsObject(Constants.BANNER_PIC);
-            result = (ArrayList<FrontpageBean.ResultBannerBean.FocusBean.ResultBeanX>) maCache.getAsObject(Constants.BANNER_PIC_DATA);
+            result = (ArrayList<BannerItemBean>) maCache.getAsObject(Constants.BANNER_PIC_DATA);
         } catch (Exception e) {
             e.printStackTrace();
         }
         if (mBannerImages != null && mBannerImages.size() > 0) {
             // 加上缓存使其可以点击
-            everydayNavigator.showBannerView(mBannerImages, result);
+            bannerDataBean.setData(mBannerImages, result);
+            bannerData.setValue(bannerDataBean);
         } else {
-            showBanncerPage();
+            showBannerPage();
         }
         mLists = (ArrayList<List<AndroidBean>>) maCache.getAsObject(Constants.EVERYDAY_CONTENT);
         if (mLists != null && mLists.size() > 0) {
-            everydayNavigator.showListView(mLists);
+            saveDate();
+            contentData.setValue(mLists);
         } else {
-            everydayNavigator.showRotaLoading();
             showRecyclerViewData();
         }
     }
 
-
-    public void loadData() {
-        String oneData = SPUtils.getString("everyday_data", "2016-11-26");
-//        DebugUtil.error("----"+oneData);
-        if (!oneData.equals(TimeUtil.getData())) {// 是第二天
-            if (TimeUtil.isRightTime()) {//大于12：30,请求
-
-                everydayNavigator.setIsOldDayRequest(false);
-                mEverydayModel.setData(getTodayTime().get(0), getTodayTime().get(1), getTodayTime().get(2));
-                everydayNavigator.showRotaLoading();
-                showBanncerPage();
-                showRecyclerViewData();
-            } else {// 小于，取缓存没有请求前一天
-
-                ArrayList<String> lastTime = TimeUtil.getLastTime(getTodayTime().get(0), getTodayTime().get(1), getTodayTime().get(2));
-                mEverydayModel.setData(lastTime.get(0), lastTime.get(1), lastTime.get(2));
-                year = lastTime.get(0);
-                month = lastTime.get(1);
-                day = lastTime.get(2);
-                // 是昨天
-                everydayNavigator.setIsOldDayRequest(true);
-                everydayNavigator.getACacheData();
-            }
-        } else {// 当天，取缓存没有请求当天
-            // 是昨天
-            everydayNavigator.setIsOldDayRequest(false);
-            everydayNavigator.getACacheData();
+    /**
+     * 保存时间
+     */
+    private void saveDate() {
+        isHaveData = true;
+        isShowLoading.setValue(false);
+        if (isOldDayRequest) {
+            ArrayList<String> lastTime = TimeUtil.getLastTime(getTodayTime().get(0), getTodayTime().get(1), getTodayTime().get(2));
+            SPUtils.putString("everyday_data", lastTime.get(0) + "-" + lastTime.get(1) + "-" + lastTime.get(2));
+        } else {
+            // 保存请求的日期
+            SPUtils.putString("everyday_data", TimeUtil.getData());
         }
     }
 
@@ -207,5 +257,39 @@ public class EverydayViewModel extends ViewModel {
         list.add(month);
         list.add(day);
         return list;
+    }
+
+    public void onDestroy() {
+        isHaveData = false;
+        mEverydayModel = null;
+        if (mLists != null) {
+            mLists.clear();
+            mLists = null;
+        }
+        if (mBannerImages != null) {
+            mBannerImages.clear();
+            mBannerImages = null;
+        }
+    }
+
+    public class BannerDataBean {
+
+        private ArrayList<String> imageUrls;
+        private ArrayList<BannerItemBean> list;
+
+        protected void setData(ArrayList<String> imageUrls, ArrayList<BannerItemBean> list) {
+            this.imageUrls = imageUrls;
+            this.list = list;
+        }
+
+        public ArrayList<String> getImageUrls() {
+            return imageUrls;
+        }
+
+
+        public ArrayList<BannerItemBean> getList() {
+            return list;
+        }
+
     }
 }

@@ -12,14 +12,12 @@
             android:id="@+id/ll_one_photo_line"
             android:layout_width="match_parent"
             android:layout_height="12dp"
-            android:background="@color/colorPageBg"
             android:visibility="gone" />
 
         <ImageView
             android:id="@+id/iv_one_photo"
             android:layout_width="match_parent"
             android:layout_height="127dp"
-            android:background="@drawable/img_two_bi_one"
             android:scaleType="fitXY" />
 
         <TextView

@@ -20,8 +20,6 @@
                 android:layout_height="95dp"
                 android:scaleType="fitXY" />
 
-            <!--android:background="@drawable/img_two_bi_one"-->
-
             <TextView
                 android:id="@+id/tv_two_one_one_title"
                 android:layout_width="match_parent"
@@ -38,8 +36,7 @@
 
         <View
             android:layout_width="4dp"
-            android:layout_height="match_parent"
-            android:background="@color/colorPageBg" />
+            android:layout_height="match_parent" />
 
         <LinearLayout
             android:id="@+id/ll_two_one_two"

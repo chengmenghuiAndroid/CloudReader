@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layout xmlns:android="http://schemas.android.com/apk/res/android">
-
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <data>
 
@@ -10,63 +11,131 @@
 
         <variable
             name="bean"
-            type="com.example.jingbin.cloudreader.bean.wanandroid.HomeListBean.DataBean.DatasBean" />
+            type="com.example.jingbin.cloudreader.bean.wanandroid.ArticlesBean" />
 
+        <import type="android.text.Html" />
+
+        <import type="android.text.TextUtils" />
+
+        <import type="android.view.View" />
     </data>
 
-    <android.support.v7.widget.CardView
+    <!--如果有点击事件，则内部的水波纹不能扩散-->
+    <android.support.constraint.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="3dp"
-        android:layout_marginLeft="8dp"
-        android:layout_marginRight="8dp"
-        android:layout_marginTop="8dp">
+        android:foreground="?attr/selectableItemBackgroundBorderless"
+        android:onClick="@{()->adapter.openDetail(bean)}"
+        android:paddingBottom="8dp"
+        android:paddingRight="8dp"
+        android:paddingTop="8dp">
 
         <RelativeLayout
-            android:id="@+id/ll_item_top"
+            android:id="@+id/rl_header"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@drawable/ripple_one_item_bg"
-            android:onClick="@{()->adapter.openDetail(bean)}"
-            android:padding="8dp">
+            android:layout_marginStart="8dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
 
-
-            <TextView
-                android:id="@+id/textView"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_alignParentStart="true"
-                android:layout_alignParentTop="true"
-                android:layout_marginTop="8dp"
-                android:lineSpacingExtra="4dp"
-                android:text="@{bean.title}"
-                android:textColor="@color/colorContent"
-                android:textSize="16sp" />
+            <ImageView
+                android:id="@+id/iv_new"
+                android:layout_width="40dp"
+                android:layout_height="25dp"
+                android:background="?selectableItemBackgroundBorderless"
+                android:src="@drawable/icon_new"
+                android:visibility="@{bean.fresh?View.VISIBLE:View.GONE}" />
 
             <TextView
-                android:id="@+id/textView2"
+                android:id="@+id/tv_tag_name"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_alignParentEnd="true"
-                android:layout_below="@+id/textView"
-                android:layout_marginTop="15dp"
-                android:text="@{bean.niceDate}"
+                android:background="?selectableItemBackgroundBorderless"
+                android:onClick="@{()->adapter.openArticleList(bean)}"
+                android:paddingBottom="2dp"
+                android:paddingLeft="7dp"
+                android:paddingRight="7dp"
+                android:paddingTop="2dp"
+                android:text='@{TextUtils.isEmpty(bean.chapterName)?@string/string_empty:Html.fromHtml(bean.chapterName)}'
                 android:textColor="@color/colorSubtitle"
-                android:textSize="12sp" />
+                android:textSize="13sp"
+                android:visibility="@{adapter.isNoShowChapterName?View.GONE:View.VISIBLE}"
+                app:layout_constraintEnd_toEndOf="parent"
+                tools:text="技术博客" />
 
-            <TextView
-                android:id="@+id/textView3"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_alignParentStart="true"
-                android:layout_below="@+id/textView"
-                android:layout_marginTop="15dp"
-                android:text="@{bean.author}"
-                android:textColor="@color/colorSubtitle"
-                android:textSize="12sp" />
         </RelativeLayout>
 
-    </android.support.v7.widget.CardView>
+        <ImageView
+            android:id="@+id/iv_image"
+            android:layout_width="60dp"
+            android:layout_height="78dp"
+            android:layout_marginStart="8dp"
+            android:defaultPicType="@{1}"
+            android:displayFadeImage="@{bean.envelopePic}"
+            android:scaleType="centerCrop"
+            android:visibility="@{bean.isShowImage?View.VISIBLE:View.GONE}"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/rl_header"
+            tools:background="@color/colorLine" />
 
+        <TextView
+            android:id="@+id/tv_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_marginTop="8dp"
+            android:ellipsize="end"
+            android:lineSpacingExtra="4dp"
+            android:maxLines="2"
+            android:text="@{Html.fromHtml(bean.title)}"
+            android:textColor="@color/colorContent"
+            android:textSize="14sp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@+id/iv_image"
+            app:layout_constraintTop_toTopOf="@+id/iv_image"
+            tools:text="一款基于网易云音乐UI，使用玩安卓、Gank.Io及豆瓣api开发的符合Google.." />
+
+
+        <TextView
+            android:id="@+id/tv_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="13dp"
+            android:text="@{bean.niceDate}"
+            android:textColor="@color/colorSubtitle"
+            android:textSize="11sp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="@+id/tv_title"
+            app:layout_constraintTop_toBottomOf="@+id/tv_title"
+            tools:text="2010-10-10" />
+
+        <TextView
+            android:id="@+id/textView3"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@{@string/string_dian + bean.author}"
+            android:textColor="@color/colorSubtitle"
+            android:textSize="11sp"
+            app:layout_constraintStart_toEndOf="@+id/tv_time"
+            app:layout_constraintTop_toTopOf="@+id/tv_time"
+            tools:text=" · jingbin" />
+
+        <CheckBox
+            android:id="@+id/vb_collect"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentRight="true"
+            android:layout_marginLeft="5dp"
+            android:layout_marginRight="5dp"
+            android:layout_marginTop="3dp"
+            android:background="?selectableItemBackgroundBorderless"
+            android:button="@drawable/selector_collect_check"
+            android:checked="@{bean.collect}"
+            android:gravity="center"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+    </android.support.constraint.ConstraintLayout>
 
 </layout>

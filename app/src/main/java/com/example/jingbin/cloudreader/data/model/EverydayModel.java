@@ -14,18 +14,18 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-import rx.Observable;
-import rx.Observer;
-import rx.Subscription;
-import rx.android.schedulers.AndroidSchedulers;
-import rx.functions.Func1;
-import rx.schedulers.Schedulers;
+import io.reactivex.Observable;
+import io.reactivex.Observer;
+import io.reactivex.android.schedulers.AndroidSchedulers;
+import io.reactivex.disposables.Disposable;
+import io.reactivex.functions.Consumer;
+import io.reactivex.functions.Function;
+import io.reactivex.schedulers.Schedulers;
 
 /**
  * Created by jingbin on 2016/12/1.
  * 每日推荐model
  */
-
 public class EverydayModel {
 
     private String year = "2016";
@@ -44,25 +44,27 @@ public class EverydayModel {
     /**
      * 轮播图
      */
-    public void showBanncerPage(final RequestImpl listener) {
-        Subscription subscription = HttpClient.Builder.getTingServer().getFrontpage()
+    public void showBannerPage(final RequestImpl listener) {
+        Disposable subscribe = HttpClient.Builder.getTingServer().getFrontpage()
                 .observeOn(AndroidSchedulers.mainThread()).subscribeOn(Schedulers.io())
-                .subscribe(new Observer<FrontpageBean>() {
+                .subscribe(new Consumer<FrontpageBean>() {
                     @Override
-                    public void onCompleted() {
+                    public void accept(FrontpageBean frontpageBean) throws Exception {
+                        if (listener != null) {
+                            listener.loadSuccess(frontpageBean);
+                        }
                     }
-
+                }, new Consumer<Throwable>() {
                     @Override
-                    public void onError(Throwable e) {
-                        listener.loadFailed();
-                    }
-
-                    @Override
-                    public void onNext(FrontpageBean frontpageBean) {
-                        listener.loadSuccess(frontpageBean);
+                    public void accept(Throwable throwable) throws Exception {
+                        if (listener != null) {
+                            listener.loadFailed();
+                        }
                     }
                 });
-        listener.addSubscription(subscription);
+        if (listener != null) {
+            listener.addSubscription(subscribe);
+        }
     }
 
     /**
@@ -72,9 +74,10 @@ public class EverydayModel {
         SPUtils.putString(HOME_ONE, "");
         SPUtils.putString(HOME_TWO, "");
         SPUtils.putString(HOME_SIX, "");
-        Func1<GankIoDayBean, Observable<List<List<AndroidBean>>>> func1 = new Func1<GankIoDayBean, Observable<List<List<AndroidBean>>>>() {
+        Function<GankIoDayBean, Observable<List<List<AndroidBean>>>> function = new Function<GankIoDayBean, Observable<List<List<AndroidBean>>>>() {
+
             @Override
-            public Observable<List<List<AndroidBean>>> call(GankIoDayBean gankIoDayBean) {
+            public Observable<List<List<AndroidBean>>> apply(GankIoDayBean gankIoDayBean) throws Exception {
 
                 List<List<AndroidBean>> lists = new ArrayList<>();
                 GankIoDayBean.ResultsBean results = gankIoDayBean.getResults();
@@ -109,13 +112,20 @@ public class EverydayModel {
         };
 
         Observer<List<List<AndroidBean>>> observer = new Observer<List<List<AndroidBean>>>() {
-            @Override
-            public void onCompleted() {
-            }
 
             @Override
             public void onError(Throwable e) {
                 listener.loadFailed();
+            }
+
+            @Override
+            public void onComplete() {
+
+            }
+
+            @Override
+            public void onSubscribe(Disposable d) {
+                listener.addSubscription(d);
             }
 
             @Override
@@ -124,11 +134,12 @@ public class EverydayModel {
             }
         };
 
-        Subscription subscription = HttpClient.Builder.getGankIOServer().getGankIoDay(year, month, day)
-                .subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread())
-                .flatMap(func1)
+        HttpClient.Builder.getGankIOServer().getGankIoDay(year, month, day)
+                .flatMap(function)
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(observer);
-        listener.addSubscription(subscription);
+//        listener.addSubscription(disposable);
     }
 
     // subList没有实现序列化！缓存时会出错！
@@ -226,10 +237,10 @@ public class EverydayModel {
             urlLength = ConstantsImageUrl.HOME_SIX_URLS.length;
         }
 
-        String home_six = SPUtils.getString(saveWhere, "");
-        if (!TextUtils.isEmpty(home_six)) {
+        String homeSix = SPUtils.getString(saveWhere, "");
+        if (!TextUtils.isEmpty(homeSix)) {
             // 已取到的值
-            String[] split = home_six.split(",");
+            String[] split = homeSix.split(",");
 
             Random random = new Random();
             for (int j = 0; j < urlLength; j++) {
@@ -243,7 +254,7 @@ public class EverydayModel {
                     }
                 }
                 if (!isUse) {
-                    StringBuilder sb = new StringBuilder(home_six);
+                    StringBuilder sb = new StringBuilder(homeSix);
                     sb.insert(0, randomInt + ",");
                     SPUtils.putString(saveWhere, sb.toString());
                     return randomInt;

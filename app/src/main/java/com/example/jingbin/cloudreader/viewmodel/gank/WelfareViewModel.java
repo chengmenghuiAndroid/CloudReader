@@ -1,18 +1,26 @@
 package com.example.jingbin.cloudreader.viewmodel.gank;
 
-import android.arch.lifecycle.ViewModel;
+import android.annotation.SuppressLint;
+import android.app.Application;
+import android.arch.lifecycle.AndroidViewModel;
+import android.arch.lifecycle.MutableLiveData;
+import android.support.annotation.NonNull;
 
 import com.example.http.HttpUtils;
-import com.example.jingbin.cloudreader.app.CloudReaderApplication;
-import com.example.jingbin.cloudreader.base.BaseFragment;
 import com.example.jingbin.cloudreader.bean.GankIoDataBean;
 import com.example.jingbin.cloudreader.data.model.GankOtherModel;
 import com.example.jingbin.cloudreader.http.RequestImpl;
-import com.example.jingbin.cloudreader.http.cache.ACache;
 
 import java.util.ArrayList;
 
-import rx.Subscription;
+import io.reactivex.Observable;
+import io.reactivex.ObservableEmitter;
+import io.reactivex.ObservableOnSubscribe;
+import io.reactivex.android.schedulers.AndroidSchedulers;
+import io.reactivex.disposables.Disposable;
+import io.reactivex.functions.Consumer;
+import io.reactivex.schedulers.Schedulers;
+
 
 /**
  * @author jingbin
@@ -20,80 +28,93 @@ import rx.Subscription;
  * @Description 福利页面ViewModel
  */
 
-public class WelfareViewModel extends ViewModel {
+public class WelfareViewModel extends AndroidViewModel {
 
-    private final BaseFragment activity;
     private final GankOtherModel mModel;
-    private final ACache mACache;
-    private WelfareNavigator navigator;
     private int mPage = 1;
+
+    /**
+     * 图片url集合
+     */
     private ArrayList<String> imgList = new ArrayList<>();
+    /**
+     * 图片标题集合，用于保存图片时使用
+     */
     private ArrayList<String> imageTitleList = new ArrayList<>();
+    /**
+     * 传递给Activity数据集合
+     */
+    private ArrayList<ArrayList<String>> allList = new ArrayList<>();
+    private final MutableLiveData<ArrayList<ArrayList<String>>> allListData = new MutableLiveData<>();
 
-    public void setNavigator(WelfareNavigator navigator) {
-        this.navigator = navigator;
-    }
-
-    public void onDestroy() {
-        navigator = null;
-    }
-
-    public WelfareViewModel(BaseFragment activity) {
-        this.activity = activity;
+    public WelfareViewModel(@NonNull Application application) {
+        super(application);
         mModel = new GankOtherModel();
-        mACache = ACache.get(CloudReaderApplication.getInstance());
     }
 
-    public void loadWelfareData(){
+    public MutableLiveData<ArrayList<ArrayList<String>>> getImageAndTitle() {
+        return allListData;
+    }
+
+    public MutableLiveData<GankIoDataBean> loadWelfareData() {
+        final MutableLiveData<GankIoDataBean> data = new MutableLiveData<>();
         mModel.setData("福利", mPage, HttpUtils.per_page_more);
         mModel.getGankIoData(new RequestImpl() {
             @Override
             public void loadSuccess(Object object) {
-                navigator.showLoadSuccessView();
-
                 GankIoDataBean gankIoDataBean = (GankIoDataBean) object;
-                if (mPage == 1) {
-                    if (gankIoDataBean != null
-                            && gankIoDataBean.getResults() != null
-                            && gankIoDataBean.getResults().size() > 0) {
-                        imgList.clear();
-                        for (int i = 0; i < gankIoDataBean.getResults().size(); i++) {
-                            imgList.add(gankIoDataBean.getResults().get(i).getUrl());
-                            imageTitleList.add(gankIoDataBean.getResults().get(i).getDesc());
-                        }
-                        navigator.setImageList(imgList,imageTitleList);
-                        navigator.showAdapterView(gankIoDataBean);
-
-                    } else {
-                        navigator.showLoadFailedView();
-                    }
-                } else {
-                    if (gankIoDataBean != null && gankIoDataBean.getResults() != null && gankIoDataBean.getResults().size() > 0) {
-                        navigator.refreshAdapter(gankIoDataBean);
-                        for (int i = 0; i < gankIoDataBean.getResults().size(); i++) {
-                            imgList.add(gankIoDataBean.getResults().get(i).getUrl());
-                            imageTitleList.add(gankIoDataBean.getResults().get(i).getDesc());
-                        }
-                        navigator.setImageList(imgList,imageTitleList);
-                    } else {
-                        navigator.showListNoMoreLoading();
-                    }
-                }
+                handleImageList(gankIoDataBean);
+                data.setValue(gankIoDataBean);
             }
 
             @Override
             public void loadFailed() {
-                navigator.showLoadFailedView();
                 if (mPage > 1) {
                     mPage--;
                 }
+                data.setValue(null);
             }
 
             @Override
-            public void addSubscription(Subscription subscription) {
-                activity.addSubscription(subscription);
+            public void addSubscription(Disposable subscription) {
             }
         });
+        return data;
+    }
+
+    /**
+     * 异步处理用于图片详情显示的数据
+     *
+     * @param gankIoDataBean 原数据
+     */
+    @SuppressLint("CheckResult")
+    private void handleImageList(GankIoDataBean gankIoDataBean) {
+        Observable
+                .create(new ObservableOnSubscribe<ArrayList<ArrayList<String>>>() {
+                    @Override
+                    public void subscribe(ObservableEmitter<ArrayList<ArrayList<String>>> emitter) throws Exception {
+                        imgList.clear();
+                        imageTitleList.clear();
+                        for (int i = 0; i < gankIoDataBean.getResults().size(); i++) {
+                            imgList.add(gankIoDataBean.getResults().get(i).getUrl());
+                            imageTitleList.add(gankIoDataBean.getResults().get(i).getDesc());
+                        }
+                        allList.clear();
+                        allList.add(imgList);
+                        allList.add(imageTitleList);
+                        emitter.onNext(allList);
+                    }
+                })
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(new Consumer<ArrayList<ArrayList<String>>>() {
+                    @Override
+                    public void accept(ArrayList<ArrayList<String>> arrayLists) throws Exception {
+                        allListData.setValue(arrayLists);
+                    }
+                });
+
+
     }
 
     public int getPage() {
@@ -102,5 +123,14 @@ public class WelfareViewModel extends ViewModel {
 
     public void setPage(int mPage) {
         this.mPage = mPage;
+    }
+
+    public void onDestroy() {
+        imgList.clear();
+        imgList = null;
+        imageTitleList.clear();
+        imageTitleList = null;
+        allList.clear();
+        allList = null;
     }
 }

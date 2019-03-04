@@ -1,10 +1,13 @@
 package com.example.jingbin.cloudreader.ui.gank.child;
 
+import android.animation.ValueAnimator;
+import android.arch.lifecycle.Observer;
 import android.databinding.DataBindingUtil;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.support.v7.widget.DefaultItemAnimator;
 import android.support.v7.widget.LinearLayoutManager;
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.animation.Animation;
@@ -16,20 +19,18 @@ import com.example.jingbin.cloudreader.R;
 import com.example.jingbin.cloudreader.adapter.EverydayAdapter;
 import com.example.jingbin.cloudreader.base.BaseFragment;
 import com.example.jingbin.cloudreader.bean.AndroidBean;
-import com.example.jingbin.cloudreader.bean.FrontpageBean;
+import com.example.jingbin.cloudreader.bean.BannerItemBean;
 import com.example.jingbin.cloudreader.databinding.FooterItemEverydayBinding;
 import com.example.jingbin.cloudreader.databinding.FragmentEverydayBinding;
 import com.example.jingbin.cloudreader.databinding.HeaderItemEverydayBinding;
 import com.example.jingbin.cloudreader.http.rx.RxBus;
 import com.example.jingbin.cloudreader.http.rx.RxBusBaseMessage;
 import com.example.jingbin.cloudreader.http.rx.RxCodeConstants;
+import com.example.jingbin.cloudreader.utils.DensityUtil;
 import com.example.jingbin.cloudreader.utils.GlideImageLoader;
 import com.example.jingbin.cloudreader.utils.PerfectClickListener;
-import com.example.jingbin.cloudreader.utils.SPUtils;
-import com.example.jingbin.cloudreader.utils.TimeUtil;
 import com.example.jingbin.cloudreader.utils.UpdateUtil;
 import com.example.jingbin.cloudreader.view.webview.WebViewActivity;
-import com.example.jingbin.cloudreader.viewmodel.gank.EverydayNavigator;
 import com.example.jingbin.cloudreader.viewmodel.gank.EverydayViewModel;
 
 import java.util.ArrayList;
@@ -47,26 +48,18 @@ import static com.example.jingbin.cloudreader.viewmodel.gank.EverydayViewModel.g
  * 否：使用缓存 ： |无：请求今天数据
  * **********    |有：使用缓存
  */
-public class EverydayFragment extends BaseFragment<FragmentEverydayBinding> implements EverydayNavigator {
+public class EverydayFragment extends BaseFragment<EverydayViewModel, FragmentEverydayBinding> {
 
-    private static final String TAG = "EverydayFragment";
     private HeaderItemEverydayBinding mHeaderBinding;
-    private FooterItemEverydayBinding mFooterBinding;
-    private View mHeaderView;
-    private View mFooterView;
     private EverydayAdapter mEverydayAdapter;
     private boolean mIsPrepared = false;
-    private boolean mIsFirst = true;
-    // 是否是上一天的请求
-    private boolean isOldDayRequest;
     private RotateAnimation animation;
-    private EverydayViewModel everydayViewModel;
+    private boolean isLoadBanner;
 
     @Override
     public int setContent() {
         return R.layout.fragment_everyday;
     }
-
 
     @Override
     public void onActivityCreated(@Nullable Bundle savedInstanceState) {
@@ -74,13 +67,7 @@ public class EverydayFragment extends BaseFragment<FragmentEverydayBinding> impl
 
         showContentView();
         initAnimation();
-
-        everydayViewModel = new EverydayViewModel(this);
-        everydayViewModel.setEverydayNavigator(this);
-        mHeaderBinding = DataBindingUtil.inflate(LayoutInflater.from(getContext()), R.layout.header_item_everyday, null, false);
-        initLocalSetting();
         initRecyclerView();
-        UpdateUtil.check(getActivity(),false);
 
         mIsPrepared = true;
         /**
@@ -90,41 +77,79 @@ public class EverydayFragment extends BaseFragment<FragmentEverydayBinding> impl
         loadData();
     }
 
-    private void initAnimation() {
-        bindingView.llLoading.setVisibility(View.VISIBLE);
-        animation = new RotateAnimation(0f, 360f, Animation.RELATIVE_TO_SELF, 0.5f, Animation.RELATIVE_TO_SELF, 0.5f);
-        animation.setDuration(3000);//设置动画持续时间
-        animation.setInterpolator(new LinearInterpolator());//不停顿
-        animation.setRepeatCount(10);
-        bindingView.ivLoading.setAnimation(animation);
-        animation.startNow();
-    }
-
     @Override
     protected void loadData() {
-        // 显示时轮播图滚动
-        if (mHeaderBinding != null && mHeaderBinding.banner != null) {
-            mHeaderBinding.banner.startAutoPlay();
-            mHeaderBinding.banner.setDelayTime(4000);
-        }
-
         if (!mIsVisible || !mIsPrepared) {
             return;
         }
-        everydayViewModel.loadData();
+        bindingView.xrvEveryday.postDelayed(() -> viewModel.loadData(), 150);
     }
 
-    /**
-     * 设置本地数据点击事件等
-     */
-    private void initLocalSetting() {
+    private void initRecyclerView() {
+        mHeaderBinding = DataBindingUtil.inflate(LayoutInflater.from(getContext()), R.layout.header_item_everyday, null, false);
+        FooterItemEverydayBinding mFooterBinding = DataBindingUtil.inflate(LayoutInflater.from(getContext()), R.layout.footer_item_everyday, null, false);
+        bindingView.xrvEveryday.setPullRefreshEnabled(false);
+        bindingView.xrvEveryday.setLoadingMoreEnabled(false);
+        bindingView.xrvEveryday.addHeaderView(mHeaderBinding.getRoot());
+        bindingView.xrvEveryday.addFootView(mFooterBinding.getRoot(), true);
+        bindingView.xrvEveryday.noMoreLoading();
+        bindingView.xrvEveryday.setLayoutManager(new LinearLayoutManager(getContext()));
+        // 需加，不然滑动不流畅
+        bindingView.xrvEveryday.setNestedScrollingEnabled(false);
+        bindingView.xrvEveryday.setHasFixedSize(false);
+        bindingView.xrvEveryday.setItemAnimator(new DefaultItemAnimator());
+        mEverydayAdapter = new EverydayAdapter();
+        bindingView.xrvEveryday.setAdapter(mEverydayAdapter);
+
         // 显示日期,去掉第一位的"0"
-        mHeaderBinding.includeEveryday.tvDailyText.setText(getTodayTime().get(2).indexOf("0") == 0 ?
-                getTodayTime().get(2).replace("0", "") : getTodayTime().get(2));
+        String day = getTodayTime().get(2);
+        mHeaderBinding.includeEveryday.tvDailyText.setText(day.indexOf("0") == 0 ? day.replace("0", "") : day);
         mHeaderBinding.includeEveryday.ibXiandu.setOnClickListener(listener);
         mHeaderBinding.includeEveryday.ibWanAndroid.setOnClickListener(listener);
         mHeaderBinding.includeEveryday.ibMovieHot.setOnClickListener(listener);
         mHeaderBinding.includeEveryday.flEveryday.setOnClickListener(listener);
+        DensityUtil.formatHeight(mHeaderBinding.banner, DensityUtil.getDisplayWidth(), 2.5f, 1);
+
+        onObserveViewModel();
+    }
+
+    private void onObserveViewModel() {
+        viewModel.getShowLoading().observe(this, new Observer<Boolean>() {
+            @Override
+            public void onChanged(@Nullable Boolean aBoolean) {
+                showRotaLoading(aBoolean);
+            }
+        });
+        viewModel.getBannerData().observe(this, new Observer<EverydayViewModel.BannerDataBean>() {
+            @Override
+            public void onChanged(@Nullable EverydayViewModel.BannerDataBean bean) {
+                if (bean != null && bean.getImageUrls() != null && bean.getImageUrls().size() > 0) {
+                    mHeaderBinding.banner.setImages(bean.getImageUrls()).setImageLoader(new GlideImageLoader()).start();
+                    ArrayList<BannerItemBean> list = bean.getList();
+                    if (list != null && list.size() > 0) {
+                        mHeaderBinding.banner.setOnBannerListener(position -> {
+                            if (!TextUtils.isEmpty(list.get(position).getCode()) && list.get(position).getCode().startsWith("http")) {
+                                WebViewActivity.loadUrl(getContext(), list.get(position).getCode(), "加载中...");
+                            }
+                        });
+                    }
+                    isLoadBanner = true;
+                }
+            }
+        });
+        viewModel.getContentData().observe(this, new Observer<ArrayList<List<AndroidBean>>>() {
+            @Override
+            public void onChanged(@Nullable ArrayList<List<AndroidBean>> lists) {
+                if (lists != null && lists.size() > 0) {
+                    mEverydayAdapter.clear();
+                    mEverydayAdapter.addAll(lists);
+                    mEverydayAdapter.notifyDataSetChanged();
+                    bindingView.xrvEveryday.refreshComplete();
+                } else {
+                    showError();
+                }
+            }
+        });
     }
 
     private PerfectClickListener listener = new PerfectClickListener() {
@@ -149,115 +174,6 @@ public class EverydayFragment extends BaseFragment<FragmentEverydayBinding> impl
         }
     };
 
-    /**
-     * 取缓存
-     */
-    @Override
-    public void getACacheData() {
-        if (!mIsFirst) {
-            return;
-        }
-        everydayViewModel.handleCache();
-    }
-
-    /**
-     * 设置banner图
-     */
-    @Override
-    public void showBannerView(ArrayList<String> mBannerImages, List<FrontpageBean.ResultBannerBean.FocusBean.ResultBeanX> result) {
-        mHeaderBinding.banner.setImages(mBannerImages).setImageLoader(new GlideImageLoader()).start();
-        if (result != null) {
-            mHeaderBinding.banner.setOnBannerListener(position -> {
-                if (result.get(position) != null && result.get(position).getCode() != null
-                        && result.get(position).getCode().startsWith("http")) {
-                    WebViewActivity.loadUrl(getContext(), result.get(position).getCode(), "加载中...");
-                }
-            });
-        }
-    }
-
-    /**
-     * 显示旋转动画
-     */
-    @Override
-    public void showRotaLoading() {
-        showRotaLoading(true);
-    }
-
-    /**
-     * 设置是否是上一天的请求
-     */
-    @Override
-    public void setIsOldDayRequest(boolean isOldDayRequest) {
-        this.isOldDayRequest = isOldDayRequest;
-    }
-
-    /**
-     * 显示列表内容
-     */
-    @Override
-    public void showListView(ArrayList<List<AndroidBean>> mLists) {
-        setAdapter(mLists);
-    }
-
-    /**
-     * 显示错页面
-     */
-    @Override
-    public void showErrorView() {
-        showError();
-    }
-
-    private void initRecyclerView() {
-        bindingView.xrvEveryday.setPullRefreshEnabled(false);
-        bindingView.xrvEveryday.setLoadingMoreEnabled(false);
-        if (mHeaderView == null) {
-            mHeaderView = mHeaderBinding.getRoot();
-            bindingView.xrvEveryday.addHeaderView(mHeaderView);
-        }
-        if (mFooterView == null) {
-            mFooterBinding = DataBindingUtil.inflate(LayoutInflater.from(getContext()), R.layout.footer_item_everyday, null, false);
-            mFooterView = mFooterBinding.getRoot();
-            bindingView.xrvEveryday.addFootView(mFooterView, true);
-            bindingView.xrvEveryday.noMoreLoading();
-        }
-        bindingView.xrvEveryday.setLayoutManager(new LinearLayoutManager(getContext()));
-        // 需加，不然滑动不流畅
-        bindingView.xrvEveryday.setNestedScrollingEnabled(false);
-        bindingView.xrvEveryday.setHasFixedSize(false);
-        bindingView.xrvEveryday.setItemAnimator(new DefaultItemAnimator());
-    }
-
-    private void setAdapter(ArrayList<List<AndroidBean>> lists) {
-        showRotaLoading(false);
-        if (mEverydayAdapter == null) {
-            mEverydayAdapter = new EverydayAdapter();
-        } else {
-            mEverydayAdapter.clear();
-        }
-        mEverydayAdapter.addAll(lists);
-
-        if (isOldDayRequest) {
-            ArrayList<String> lastTime = TimeUtil.getLastTime(getTodayTime().get(0), getTodayTime().get(1), getTodayTime().get(2));
-            SPUtils.putString("everyday_data", lastTime.get(0) + "-" + lastTime.get(1) + "-" + lastTime.get(2));
-        } else {
-            // 保存请求的日期
-            SPUtils.putString("everyday_data", TimeUtil.getData());
-        }
-        mIsFirst = false;
-
-        bindingView.xrvEveryday.setAdapter(mEverydayAdapter);
-        mEverydayAdapter.notifyDataSetChanged();
-    }
-
-    @Override
-    protected void onInvisible() {
-        // 不可见时轮播图停止滚动
-        if (mHeaderBinding != null && mHeaderBinding.banner != null) {
-            mHeaderBinding.banner.stopAutoPlay();
-        }
-    }
-
     @Override
     public void onResume() {
         super.onResume();
@@ -265,6 +181,9 @@ public class EverydayFragment extends BaseFragment<FragmentEverydayBinding> impl
         bindingView.xrvEveryday.setFocusable(false);
         // 开始图片请求
         Glide.with(getActivity()).resumeRequests();
+        if (isLoadBanner) {
+            mHeaderBinding.banner.startAutoPlay();
+        }
     }
 
     @Override
@@ -272,14 +191,28 @@ public class EverydayFragment extends BaseFragment<FragmentEverydayBinding> impl
         super.onPause();
         // 停止全部图片请求 跟随着Activity
         Glide.with(getActivity()).pauseRequests();
+        // 不可见时轮播图停止滚动
+        if (isLoadBanner) {
+            mHeaderBinding.banner.stopAutoPlay();
+        }
+    }
 
+    private void initAnimation() {
+        bindingView.llLoading.setVisibility(View.VISIBLE);
+        animation = new RotateAnimation(0f, 360f, Animation.RELATIVE_TO_SELF, 0.5f, Animation.RELATIVE_TO_SELF, 0.5f);
+        animation.setDuration(3000);//设置动画持续时间
+        animation.setInterpolator(new LinearInterpolator());//不停顿
+        animation.setRepeatMode(ValueAnimator.RESTART);//重新从头执行
+        animation.setRepeatCount(ValueAnimator.INFINITE);//设置重复次数
+        bindingView.ivLoading.setAnimation(animation);
+        animation.startNow();
     }
 
     /**
      * 显示旋转动画
      */
-    private void showRotaLoading(boolean isLoading) {
-        if (isLoading) {
+    private void showRotaLoading(Boolean isLoading) {
+        if (isLoading != null && isLoading) {
             bindingView.llLoading.setVisibility(View.VISIBLE);
             bindingView.xrvEveryday.setVisibility(View.GONE);
             animation.startNow();
@@ -294,13 +227,13 @@ public class EverydayFragment extends BaseFragment<FragmentEverydayBinding> impl
     protected void onRefresh() {
         showContentView();
         showRotaLoading(true);
-        loadData();
+        viewModel.loadData();
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
-        everydayViewModel.onDestroy();
+        viewModel.onDestroy();
     }
 
 }

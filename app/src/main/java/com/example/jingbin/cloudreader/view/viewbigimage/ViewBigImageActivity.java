@@ -1,8 +1,10 @@
 package com.example.jingbin.cloudreader.view.viewbigimage;
 
+import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
+import android.support.annotation.NonNull;
 import android.support.v4.app.FragmentActivity;
 import android.support.v4.view.PagerAdapter;
 import android.support.v4.view.ViewPager;
@@ -20,6 +22,7 @@ import com.bumptech.glide.request.RequestListener;
 import com.bumptech.glide.request.target.Target;
 import com.example.http.utils.CheckNetwork;
 import com.example.jingbin.cloudreader.R;
+import com.example.jingbin.cloudreader.utils.PermissionHandler;
 import com.example.jingbin.cloudreader.utils.RxSaveImage;
 import com.example.jingbin.cloudreader.utils.ToastUtil;
 
@@ -44,12 +47,11 @@ public class ViewBigImageActivity extends FragmentActivity implements OnPageChan
     /**
      * 用于管理图片的滑动
      */
-    ViewPager veryImageViewpager;
+    private ViewPager veryImageViewpager;
     /**
      * 显示当前图片的页数
      */
-    TextView veryImageViewpagerText;
-    private ViewPagerAdapter adapter;
+    private TextView veryImageViewpagerText;
     /**
      * 接收传过来的uri地址
      */
@@ -62,17 +64,14 @@ public class ViewBigImageActivity extends FragmentActivity implements OnPageChan
      * 用于判断是头像还是文章图片 1:头像 2：文章大图
      */
     int selet;
-
     /**
      * 当前页数
      */
     private int page;
-
     /**
      * 用于判断是否是加载本地图片
      */
     private boolean isLocal;
-
     /**
      * 本应用图片的id
      */
@@ -92,33 +91,32 @@ public class ViewBigImageActivity extends FragmentActivity implements OnPageChan
         setContentView(R.layout.activity_view_big_image);
 
         initView();
-        initClick();
         getIntentData();
     }
 
     private void getIntentData() {
         Bundle bundle = getIntent().getExtras();
-        code = bundle.getInt("code");
-        selet = bundle.getInt("selet");
-        isLocal = bundle.getBoolean("isLocal", false);
-        imageList = bundle.getStringArrayList("imageList");
-        imageTitles = bundle.getStringArrayList("imageTitles");
-        isApp = bundle.getBoolean("isApp", false);
-        imageId = bundle.getInt("id", 0);
+        if (bundle != null) {
+            code = bundle.getInt("code");
+            selet = bundle.getInt("selet");
+            isLocal = bundle.getBoolean("isLocal", false);
+            imageList = bundle.getStringArrayList("imageList");
+            imageTitles = bundle.getStringArrayList("imageTitles");
+            isApp = bundle.getBoolean("isApp", false);
+            imageId = bundle.getInt("id", 0);
+        }
 
-        /**
-         * 给viewpager设置适配器
-         */
         if (isApp) {
+            // 本地图片
             MyPageAdapter myPageAdapter = new MyPageAdapter();
             veryImageViewpager.setAdapter(myPageAdapter);
             veryImageViewpager.setEnabled(false);
         } else {
-            adapter = new ViewPagerAdapter();
+            ViewPagerAdapter adapter = new ViewPagerAdapter();
             veryImageViewpager.setAdapter(adapter);
             veryImageViewpager.setCurrentItem(code);
             page = code;
-            veryImageViewpager.setOnPageChangeListener(this);
+            veryImageViewpager.addOnPageChangeListener(this);
             veryImageViewpager.setEnabled(false);
             // 设定当前的页数和总页数
             if (selet == 2) {
@@ -131,16 +129,16 @@ public class ViewBigImageActivity extends FragmentActivity implements OnPageChan
         veryImageViewpagerText = findViewById(R.id.very_image_viewpager_text);
         tvSaveBigImage = findViewById(R.id.tv_save_big_image);
         veryImageViewpager = findViewById(R.id.very_image_viewpager);
-    }
 
-    private void initClick() {
         tvSaveBigImage.setOnClickListener(view -> {
             if (!CheckNetwork.isNetworkConnected(view.getContext())) {
                 ToastUtil.showToastLong("当前网络不可用，请检查你的网络设置");
                 return;
             }
+            if (!PermissionHandler.isHandlePermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+                return;
+            }
 
-            ToastUtil.showToast("开始下载图片");
             if (isApp) {
                 // 本地图片
                 ToastUtil.showToast("图片已存在");
@@ -154,7 +152,7 @@ public class ViewBigImageActivity extends FragmentActivity implements OnPageChan
     /**
      * 本应用图片适配器
      */
-    class MyPageAdapter extends PagerAdapter {
+    private class MyPageAdapter extends PagerAdapter {
 
         @Override
         public int getCount() {
@@ -162,15 +160,16 @@ public class ViewBigImageActivity extends FragmentActivity implements OnPageChan
         }
 
         @Override
-        public boolean isViewFromObject(View view, Object object) {
+        public boolean isViewFromObject(@NonNull View view, @NonNull Object object) {
             return view == object;
         }
 
+        @NonNull
         @Override
-        public Object instantiateItem(ViewGroup container, int position) {
+        public Object instantiateItem(@NonNull ViewGroup container, int position) {
             View view = getLayoutInflater().inflate(R.layout.viewpager_very_image, container, false);
-            PhotoView zoomImageView = (PhotoView) view.findViewById(R.id.zoom_image_view);
-            ProgressBar spinner = (ProgressBar) view.findViewById(R.id.loading);
+            PhotoView zoomImageView = view.findViewById(R.id.zoom_image_view);
+            ProgressBar spinner = view.findViewById(R.id.loading);
             spinner.setVisibility(View.GONE);
             if (imageId != 0) {
                 zoomImageView.setImageResource(imageId);
@@ -181,7 +180,7 @@ public class ViewBigImageActivity extends FragmentActivity implements OnPageChan
         }
 
         @Override
-        public void destroyItem(ViewGroup container, int position, Object object) {
+        public void destroyItem(@NonNull ViewGroup container, int position, @NonNull Object object) {
             View view = (View) object;
             container.removeView(view);
         }
@@ -189,30 +188,29 @@ public class ViewBigImageActivity extends FragmentActivity implements OnPageChan
 
     /**
      * ViewPager的适配器
-     *
-     * @author guolin
      */
-    class ViewPagerAdapter extends PagerAdapter {
+    private class ViewPagerAdapter extends PagerAdapter {
 
-        LayoutInflater inflater;
+        private LayoutInflater inflater;
 
         ViewPagerAdapter() {
             inflater = getLayoutInflater();
         }
 
+        @NonNull
         @Override
-        public Object instantiateItem(ViewGroup container, int position) {
+        public Object instantiateItem(@NonNull ViewGroup container, int position) {
             View view = inflater.inflate(R.layout.viewpager_very_image, container, false);
             final PhotoView zoomImageView = view.findViewById(R.id.zoom_image_view);
             final ProgressBar spinner = view.findViewById(R.id.loading);
             // 保存网络图片的路径
-            String adapter_image_Entity = (String) getItem(position);
+            String adapterImageEntity = (String) getItem(position);
             String imageUrl;
             if (isLocal) {
-                imageUrl = "file://" + adapter_image_Entity;
+                imageUrl = "file://" + adapterImageEntity;
                 tvSaveBigImage.setVisibility(View.GONE);
             } else {
-                imageUrl = adapter_image_Entity;
+                imageUrl = adapterImageEntity;
             }
 
             spinner.setVisibility(View.VISIBLE);
@@ -259,17 +257,17 @@ public class ViewBigImageActivity extends FragmentActivity implements OnPageChan
         }
 
         @Override
-        public boolean isViewFromObject(View arg0, Object arg1) {
+        public boolean isViewFromObject(@NonNull View arg0, @NonNull Object arg1) {
             return arg0 == arg1;
         }
 
         @Override
-        public void destroyItem(ViewGroup container, int position, Object object) {
+        public void destroyItem(@NonNull ViewGroup container, int position, @NonNull Object object) {
             View view = (View) object;
             container.removeView(view);
         }
 
-        Object getItem(int position) {
+        private Object getItem(int position) {
             return imageList.get(position);
         }
     }
@@ -287,10 +285,10 @@ public class ViewBigImageActivity extends FragmentActivity implements OnPageChan
 
     /**
      * 本方法主要监听viewpager滑动的时候的操作
+     * 每当页数发生改变时重新设定一遍当前的页数和总页数
      */
     @Override
     public void onPageSelected(int arg0) {
-        // 每当页数发生改变时重新设定一遍当前的页数和总页数
         veryImageViewpagerText.setText((arg0 + 1) + " / " + imageList.size());
         page = arg0;
     }
@@ -302,7 +300,26 @@ public class ViewBigImageActivity extends FragmentActivity implements OnPageChan
 
     @Override
     public void onOutsidePhotoTap() {
-//        finish();
+        finish();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (imageList != null) {
+            imageList.clear();
+            imageList = null;
+        }
+        if (imageTitles != null) {
+            imageTitles.clear();
+            imageTitles = null;
+        }
+        super.onDestroy();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        PermissionHandler.onRequestPermissionsResult("存储权限被拒绝，请到设置中开启", requestCode, permissions, grantResults, null);
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
 
     /**

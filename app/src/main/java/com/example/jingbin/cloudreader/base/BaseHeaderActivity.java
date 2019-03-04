@@ -1,5 +1,6 @@
 package com.example.jingbin.cloudreader.base;
 
+import android.annotation.SuppressLint;
 import android.databinding.DataBindingUtil;
 import android.databinding.ViewDataBinding;
 import android.graphics.Color;
@@ -17,10 +18,10 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewStub;
 import android.view.animation.AnimationUtils;
 import android.view.animation.Interpolator;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 
 import com.bumptech.glide.Glide;
@@ -38,16 +39,15 @@ import com.example.jingbin.cloudreader.view.test.StatusBarUtils;
 
 import java.lang.reflect.Method;
 
+import io.reactivex.disposables.CompositeDisposable;
+import io.reactivex.disposables.Disposable;
 import jp.wasabeef.glide.transformations.BlurTransformation;
-import rx.Subscription;
-import rx.subscriptions.CompositeSubscription;
 
 
 /**
  * Created by jingbin on 16/12/12.
  * 电影
- * 书籍
- * 音乐等详情页
+ * 书籍等详情页
  * 根布局：fitsSystemWindows 惹的祸
  */
 public abstract class BaseHeaderActivity<HV extends ViewDataBinding, SV extends ViewDataBinding> extends AppCompatActivity {
@@ -58,14 +58,16 @@ public abstract class BaseHeaderActivity<HV extends ViewDataBinding, SV extends 
     protected HV bindingHeaderView;
     // 内容布局view
     protected SV bindingContentView;
-    private LinearLayout llProgressBar;
-    private View refresh;
+    private View loadingView;
+    private View refreshView;
     // 滑动多少距离后标题不透明
     private int slidingDistance;
     // 这个是高斯图背景的高度
     private int imageBgHeight;
+    // 清除动画，防止内存泄漏
+    private CustomChangeBounds changeBounds;
     private AnimationDrawable mAnimationDrawable;
-    private CompositeSubscription mCompositeSubscription;
+    private CompositeDisposable mCompositeDisposable;
 
     protected <T extends View> T getView(int id) {
         return (T) findViewById(id);
@@ -104,24 +106,24 @@ public abstract class BaseHeaderActivity<HV extends ViewDataBinding, SV extends 
         // content
         RelativeLayout.LayoutParams params = new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         bindingContentView.getRoot().setLayoutParams(params);
-        RelativeLayout mContainer = (RelativeLayout) ll.findViewById(R.id.container);
+        RelativeLayout mContainer = ll.findViewById(R.id.container);
         mContainer.addView(bindingContentView.getRoot());
         getWindow().setContentView(ll);
 
-        llProgressBar = getView(R.id.ll_progress_bar);
-        refresh = getView(R.id.ll_error_refresh);
+        loadingView = ((ViewStub) getView(R.id.vs_loading)).inflate();
+        refreshView = ((ViewStub) getView(R.id.vs_error_refresh)).inflate();
+        refreshView.setVisibility(View.GONE);
 
         // 设置自定义元素共享切换动画
-        setMotion(setHeaderPicView(), false);
+//        setMotion(setHeaderPicView(), false);
 
         // 初始化滑动渐变
-        initSlideShapeTheme(setHeaderImgUrl(), setHeaderImageView());
+//        initSlideShapeTheme(setHeaderImgUrl(), setHeaderImageView());
 
         // 设置toolbar
         setToolBar();
 
-        ImageView img = getView(R.id.img_progress);
-
+        ImageView img = loadingView.findViewById(R.id.img_progress);
         // 加载动画
         mAnimationDrawable = (AnimationDrawable) img.getDrawable();
         // 默认进入页面就开启动画
@@ -129,7 +131,7 @@ public abstract class BaseHeaderActivity<HV extends ViewDataBinding, SV extends 
             mAnimationDrawable.start();
         }
         // 点击加载失败布局
-        refresh.setOnClickListener(new PerfectClickListener() {
+        refreshView.setOnClickListener(new PerfectClickListener() {
             @Override
             protected void onNoDoubleClick(View v) {
                 showLoading();
@@ -197,19 +199,20 @@ public abstract class BaseHeaderActivity<HV extends ViewDataBinding, SV extends 
             return;
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            //定义ArcMotion
+            // 定义ArcMotion
             ArcMotion arcMotion = new ArcMotion();
-            arcMotion.setMinimumHorizontalAngle(50f);
-            arcMotion.setMinimumVerticalAngle(50f);
+            // 设置曲线幅度
+            arcMotion.setMinimumHorizontalAngle(10f);
+            arcMotion.setMinimumVerticalAngle(10f);
             //插值器，控制速度
             Interpolator interpolator = AnimationUtils.loadInterpolator(this, android.R.interpolator.fast_out_slow_in);
 
-            //实例化自定义的ChangeBounds
-            CustomChangeBounds changeBounds = new CustomChangeBounds();
+            // 实例化自定义的ChangeBounds
+            changeBounds = new CustomChangeBounds();
             changeBounds.setPathMotion(arcMotion);
             changeBounds.setInterpolator(interpolator);
             changeBounds.addTarget(imageView);
-            //将切换动画应用到当前的Activity的进入和返回
+            // 将切换动画应用到当前的Activity的进入和返回
             getWindow().setSharedElementEnterTransition(changeBounds);
             getWindow().setSharedElementReturnTransition(changeBounds);
         }
@@ -231,7 +234,13 @@ public abstract class BaseHeaderActivity<HV extends ViewDataBinding, SV extends 
 //        bindingTitleView.tbBaseTitle.setTitleTextAppearance(this, R.style.ToolBar_Title);
 //        bindingTitleView.tbBaseTitle.setSubtitleTextAppearance(this, R.style.Toolbar_SubTitle);
         bindingTitleView.tbBaseTitle.setOverflowIcon(ContextCompat.getDrawable(this, R.drawable.actionbar_more));
-        bindingTitleView.tbBaseTitle.setNavigationOnClickListener(v -> onBackPressed());
+        bindingTitleView.tbBaseTitle.setNavigationOnClickListener(v -> {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                finishAfterTransition();
+            } else {
+                finish();
+            }
+        });
         bindingTitleView.tbBaseTitle.setOnMenuItemClickListener(item -> {
             switch (item.getItemId()) {
                 case R.id.actionbar_more:// 更多信息
@@ -253,6 +262,7 @@ public abstract class BaseHeaderActivity<HV extends ViewDataBinding, SV extends 
     /**
      * 显示popu内的图片
      */
+    @SuppressLint("RestrictedApi")
     @Override
     protected boolean onPrepareOptionsPanel(View view, Menu menu) {
         if (menu != null) {
@@ -376,8 +386,8 @@ public abstract class BaseHeaderActivity<HV extends ViewDataBinding, SV extends 
     }
 
     protected void showLoading() {
-        if (llProgressBar.getVisibility() != View.VISIBLE) {
-            llProgressBar.setVisibility(View.VISIBLE);
+        if (loadingView != null && loadingView.getVisibility() != View.VISIBLE) {
+            loadingView.setVisibility(View.VISIBLE);
         }
         // 开始动画
         if (!mAnimationDrawable.isRunning()) {
@@ -386,21 +396,21 @@ public abstract class BaseHeaderActivity<HV extends ViewDataBinding, SV extends 
         if (bindingContentView.getRoot().getVisibility() != View.GONE) {
             bindingContentView.getRoot().setVisibility(View.GONE);
         }
-        if (refresh.getVisibility() != View.GONE) {
-            refresh.setVisibility(View.GONE);
+        if (refreshView != null && refreshView.getVisibility() != View.GONE) {
+            refreshView.setVisibility(View.GONE);
         }
     }
 
     protected void showContentView() {
-        if (llProgressBar.getVisibility() != View.GONE) {
-            llProgressBar.setVisibility(View.GONE);
+        if (loadingView != null && loadingView.getVisibility() != View.GONE) {
+            loadingView.setVisibility(View.GONE);
         }
         // 停止动画
         if (mAnimationDrawable.isRunning()) {
             mAnimationDrawable.stop();
         }
-        if (refresh.getVisibility() != View.GONE) {
-            refresh.setVisibility(View.GONE);
+        if (refreshView != null && refreshView.getVisibility() != View.GONE) {
+            refreshView.setVisibility(View.GONE);
         }
         if (bindingContentView.getRoot().getVisibility() != View.VISIBLE) {
             bindingContentView.getRoot().setVisibility(View.VISIBLE);
@@ -408,15 +418,15 @@ public abstract class BaseHeaderActivity<HV extends ViewDataBinding, SV extends 
     }
 
     protected void showError() {
-        if (llProgressBar.getVisibility() != View.GONE) {
-            llProgressBar.setVisibility(View.GONE);
+        if (loadingView != null && loadingView.getVisibility() != View.GONE) {
+            loadingView.setVisibility(View.GONE);
         }
         // 停止动画
         if (mAnimationDrawable.isRunning()) {
             mAnimationDrawable.stop();
         }
-        if (refresh.getVisibility() != View.VISIBLE) {
-            refresh.setVisibility(View.VISIBLE);
+        if (refreshView != null && refreshView.getVisibility() != View.VISIBLE) {
+            refreshView.setVisibility(View.VISIBLE);
         }
         if (bindingContentView.getRoot().getVisibility() != View.GONE) {
             bindingContentView.getRoot().setVisibility(View.GONE);
@@ -430,24 +440,36 @@ public abstract class BaseHeaderActivity<HV extends ViewDataBinding, SV extends 
 
     }
 
-    public void addSubscription(Subscription s) {
-        if (this.mCompositeSubscription == null) {
-            this.mCompositeSubscription = new CompositeSubscription();
+    public void addSubscription(Disposable s) {
+        if (this.mCompositeDisposable == null) {
+            this.mCompositeDisposable = new CompositeDisposable();
         }
-        this.mCompositeSubscription.add(s);
+        this.mCompositeDisposable.add(s);
     }
 
     @Override
     public void onDestroy() {
-        super.onDestroy();
-        if (this.mCompositeSubscription != null && mCompositeSubscription.hasSubscriptions()) {
-            this.mCompositeSubscription.unsubscribe();
+        if (this.mCompositeDisposable != null && !mCompositeDisposable.isDisposed()) {
+            this.mCompositeDisposable.clear();
         }
+        if (changeBounds != null) {
+            changeBounds.addListener(null);
+            changeBounds.removeTarget(setHeaderPicView());
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                getWindow().setSharedElementEnterTransition(null);
+                getWindow().setSharedElementReturnTransition(null);
+            }
+        }
+        if (mAnimationDrawable != null) {
+            mAnimationDrawable.stop();
+            mAnimationDrawable = null;
+        }
+        super.onDestroy();
     }
 
-    public void removeSubscription() {
-        if (this.mCompositeSubscription != null && mCompositeSubscription.hasSubscriptions()) {
-            this.mCompositeSubscription.unsubscribe();
+    public void removeDisposable() {
+        if (this.mCompositeDisposable != null && !mCompositeDisposable.isDisposed()) {
+            this.mCompositeDisposable.dispose();
         }
     }
 }

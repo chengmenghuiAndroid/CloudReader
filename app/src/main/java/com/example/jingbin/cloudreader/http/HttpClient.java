@@ -2,6 +2,7 @@ package com.example.jingbin.cloudreader.http;
 
 import com.example.http.HttpUtils;
 import com.example.http.utils.BuildFactory;
+import com.example.jingbin.cloudreader.bean.CollectUrlBean;
 import com.example.jingbin.cloudreader.bean.FrontpageBean;
 import com.example.jingbin.cloudreader.bean.GankIoDataBean;
 import com.example.jingbin.cloudreader.bean.GankIoDayBean;
@@ -11,14 +12,20 @@ import com.example.jingbin.cloudreader.bean.UpdateBean;
 import com.example.jingbin.cloudreader.bean.book.BookBean;
 import com.example.jingbin.cloudreader.bean.book.BookDetailBean;
 import com.example.jingbin.cloudreader.bean.wanandroid.HomeListBean;
-import com.example.jingbin.cloudreader.bean.wanandroid.NhdzListBean;
+import com.example.jingbin.cloudreader.bean.wanandroid.LoginBean;
+import com.example.jingbin.cloudreader.bean.wanandroid.NaviJsonBean;
 import com.example.jingbin.cloudreader.bean.wanandroid.QsbkListBean;
+import com.example.jingbin.cloudreader.bean.wanandroid.TreeBean;
 import com.example.jingbin.cloudreader.bean.wanandroid.WanAndroidBannerBean;
 
+import io.reactivex.Flowable;
+import io.reactivex.Observable;
+import retrofit2.http.Field;
+import retrofit2.http.FormUrlEncoded;
 import retrofit2.http.GET;
+import retrofit2.http.POST;
 import retrofit2.http.Path;
 import retrofit2.http.Query;
-import rx.Observable;
 
 /**
  * @author jingbin
@@ -38,7 +45,6 @@ public interface HttpClient {
 
         public static HttpClient getGankIOServer() {
             return BuildFactory.getInstance().create(HttpClient.class, HttpUtils.API_GANKIO);
-//            return HttpUtils.getInstance().getGankIOServer(HttpClient.class);
         }
 
         public static HttpClient getFirServer() {
@@ -47,10 +53,6 @@ public interface HttpClient {
 
         public static HttpClient getWanAndroidServer() {
             return BuildFactory.getInstance().create(HttpClient.class, HttpUtils.API_WAN_ANDROID);
-        }
-
-        public static HttpClient getNHDZServer() {
-            return BuildFactory.getInstance().create(HttpClient.class, HttpUtils.API_NHDZ);
         }
 
         public static HttpClient getQSBKServer() {
@@ -94,6 +96,12 @@ public interface HttpClient {
     Observable<HotMovieBean> getHotMovie();
 
     /**
+     * 豆瓣即将上映电影
+     */
+    @GET("v2/movie/coming_soon")
+    Flowable<HotMovieBean> getComingSoon(@Query("start") int start, @Query("count") int count);
+
+    /**
      * 获取电影详情
      *
      * @param id 电影bean里的id
@@ -130,34 +138,126 @@ public interface HttpClient {
     Observable<UpdateBean> checkUpdate(@Path("id") String id, @Query("api_token") String apiToken);
 
     /**
-     * @param page 页码，从0开始
-     */
-    @GET("article/list/{page}/json")
-    Observable<HomeListBean> getHomeList(@Path("page") int page);
-
-    /**
+     * 糗事百科
+     *
      * @param page 页码，从1开始
      */
     @GET("article/list/text")
     Observable<QsbkListBean> getQsbkList(@Query("page") int page);
 
     /**
+     * 玩安卓，文章列表、知识体系下的文章
+     *
      * @param page 页码，从0开始
+     * @param cid  体系id
      */
-//    @GET("neihan/stream/mix/v1/?mpic=2&essence={page}&content_type=-102&message_cursor=-1&bd_Stringitude=113.369569&bd_latitude=23.149678&bd_city=广州市&am_Stringitude=113.367846&am_latitude=23.149878&am_city=广州市&am_loc_time=1465213692154&count=30&min_time=1465213700&screen_width=720&iid=4512422578&device_id=17215021497&ac=wifi&channel=NHSQH5AN&aid=7&app_name=joke_essay&version_code=431&device_platform=android&ssmix=a&device_type=6s+Plus&os_api=19&os_version=4.4.2&uuid=864394108025091&openudid=80FA5B208E050000&manifest_version_code=431")
-    @GET("neihan/stream/mix/v1/?mpic=2&essence=1&content_type=-102&message_cursor=-1&bd_Stringitude=113.369569&bd_latitude=23.149678&bd_city=广州市&am_Stringitude=113.367846&am_latitude=23.149878&am_city=广州市&am_loc_time=1465213692154&count=30&min_time=1465213700&screen_width=720&iid=4512422578&device_id=17215021497&ac=wifi&channel=NHSQH5AN&aid=7&app_name=joke_essay&version_code=431&device_platform=android&ssmix=a&device_type=6s+Plus&os_api=19&os_version=4.4.2&uuid=864394108025091&openudid=80FA5B208E050000&manifest_version_code=431")
-    Observable<NhdzListBean> getNhdzList(@Query("page") int page);
+    @GET("article/list/{page}/json")
+    Observable<HomeListBean> getHomeList(@Path("page") int page, @Query("cid") Integer cid);
+
+    /**
+     * 玩安卓登录
+     *
+     * @param username 用户名
+     * @param password 密码
+     */
+    @FormUrlEncoded
+    @POST("user/login")
+    Observable<LoginBean> login(@Field("username") String username, @Field("password") String password);
+
+    /**
+     * 玩安卓注册
+     */
+    @FormUrlEncoded
+    @POST("user/register")
+    Observable<LoginBean> register(@Field("username") String username, @Field("password") String password, @Field("repassword") String repassword);
+
+    /**
+     * 退出
+     */
+    @GET("user/logout/json")
+    Flowable<LoginBean> logout();
 
 
     /**
-     * 根据tag获取music
-     * @param tag
-     * @return
+     * 收藏文章列表
+     *
+     * @param page 页码
      */
+    @GET("lg/collect/list/{page}/json")
+    Flowable<HomeListBean> getCollectList(@Path("page") int page);
 
-//    @GET("v2/music/search")
-//    Observable<MusicRoot> searchMusicByTag(@Query("tag")String tag);
+    /**
+     * 收藏本站文章，errorCode返回0为成功
+     *
+     * @param id 文章id
+     */
+    @POST("lg/collect/{id}/json")
+    Flowable<HomeListBean> collect(@Path("id") int id);
 
-//    @GET("v2/music/{id}")
-//    Observable<Musics> getMusicDetail(@Path("id") String id);
+    /**
+     * 取消收藏(首页文章列表)
+     *
+     * @param id 文章id
+     */
+    @POST("lg/uncollect_originId/{id}/json")
+    Flowable<HomeListBean> unCollectOrigin(@Path("id") int id);
+
+    /**
+     * 取消收藏，我的收藏页面（该页面包含自己录入的内容）
+     *
+     * @param id       文章id
+     * @param originId 列表页下发，无则为-1
+     *                 (代表的是你收藏之前的那篇文章本身的id；
+     *                 但是收藏支持主动添加，这种情况下，没有originId则为-1)
+     */
+    @FormUrlEncoded
+    @POST("lg/uncollect/{id}/json")
+    Flowable<HomeListBean> unCollect(@Path("id") int id, @Field("originId") int originId);
+
+    /**
+     * 体系数据
+     */
+    @GET("tree/json")
+    Observable<TreeBean> getTree();
+
+    /**
+     * 收藏网址
+     *
+     * @param name 标题
+     * @param link 链接
+     */
+    @FormUrlEncoded
+    @POST("lg/collect/addtool/json")
+    Flowable<HomeListBean> collectUrl(@Field("name") String name, @Field("link") String link);
+
+    /**
+     * 编辑收藏网站
+     *
+     * @param name 标题
+     * @param link 链接
+     */
+    @FormUrlEncoded
+    @POST("lg/collect/updatetool/json")
+    Flowable<HomeListBean> updateUrl(@Field("id") int id, @Field("name") String name, @Field("link") String link);
+
+    /**
+     * 删除收藏网站
+     *
+     * @param id 收藏网址id
+     */
+    @FormUrlEncoded
+    @POST("lg/collect/deletetool/json")
+    Flowable<HomeListBean> unCollectUrl(@Field("id") int id);
+
+    /**
+     * 收藏网站列表
+     */
+    @GET("lg/collect/usertools/json")
+    Flowable<CollectUrlBean> getCollectUrlList();
+
+    /**
+     * 导航数据
+     */
+    @GET("navi/json")
+    Flowable<NaviJsonBean> getNaviJson();
 }

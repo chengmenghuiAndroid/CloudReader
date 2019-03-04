@@ -1,16 +1,16 @@
 package com.example.jingbin.cloudreader.viewmodel.gank;
 
-import android.arch.lifecycle.ViewModel;
+import android.app.Application;
+import android.arch.lifecycle.AndroidViewModel;
+import android.arch.lifecycle.MutableLiveData;
+import android.support.annotation.NonNull;
 
 import com.example.http.HttpUtils;
-import com.example.jingbin.cloudreader.app.CloudReaderApplication;
-import com.example.jingbin.cloudreader.base.BaseFragment;
 import com.example.jingbin.cloudreader.bean.GankIoDataBean;
 import com.example.jingbin.cloudreader.data.model.GankOtherModel;
 import com.example.jingbin.cloudreader.http.RequestImpl;
-import com.example.jingbin.cloudreader.http.cache.ACache;
 
-import rx.Subscription;
+import io.reactivex.disposables.Disposable;
 
 /**
  * @author jingbin
@@ -18,25 +18,19 @@ import rx.Subscription;
  * @Description 大安卓ViewModel
  */
 
-public class BigAndroidViewModel extends ViewModel {
+public class BigAndroidViewModel extends AndroidViewModel {
 
     private final GankOtherModel mModel;
-    private final ACache mACache;
     private String mType = "Android";
-    private BaseFragment activity;
-    private BigAndroidNavigator navigator;
     private int mPage = 1;
 
-    public BigAndroidViewModel(BaseFragment activity, String mType) {
-        this.activity = activity;
-        this.mType = mType;
-
-        mACache = ACache.get(CloudReaderApplication.getInstance());
+    public BigAndroidViewModel(@NonNull Application application) {
+        super(application);
         mModel = new GankOtherModel();
     }
 
-    public void setBigAndroidNavigator(BigAndroidNavigator bigAndroidNavigator) {
-        this.navigator = bigAndroidNavigator;
+    public void setType(String mType) {
+        this.mType = mType;
     }
 
     public void setPage(int mPage) {
@@ -47,45 +41,27 @@ public class BigAndroidViewModel extends ViewModel {
         return mPage;
     }
 
-    public void loadAndroidData() {
+    public MutableLiveData<GankIoDataBean> loadAndroidData() {
+        final MutableLiveData<GankIoDataBean> data = new MutableLiveData<>();
         mModel.setData(mType, mPage, HttpUtils.per_page_more);
         mModel.getGankIoData(new RequestImpl() {
             @Override
             public void loadSuccess(Object object) {
-                navigator.showLoadSuccessView();
-                GankIoDataBean gankIoDataBean = (GankIoDataBean) object;
-                if (mPage == 1) {
-                    if (gankIoDataBean != null && gankIoDataBean.getResults() != null && gankIoDataBean.getResults().size() > 0) {
-                        navigator.showAdapterView(gankIoDataBean);
-
-                    } else {
-                        navigator.showLoadFailedView();
-                    }
-                } else {
-                    if (gankIoDataBean != null && gankIoDataBean.getResults() != null && gankIoDataBean.getResults().size() > 0) {
-                        navigator.refreshAdapter(gankIoDataBean);
-                    } else {
-                        navigator.showListNoMoreLoading();
-                    }
-                }
+                data.setValue((GankIoDataBean) object);
             }
 
             @Override
             public void loadFailed() {
-                navigator.showLoadFailedView();
                 if (mPage > 1) {
                     mPage--;
                 }
+                data.setValue(null);
             }
 
             @Override
-            public void addSubscription(Subscription subscription) {
-                activity.addSubscription(subscription);
+            public void addSubscription(Disposable subscription) {
             }
         });
-    }
-
-    public void onDestroy() {
-        navigator = null;
+        return data;
     }
 }

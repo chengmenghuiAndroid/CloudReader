@@ -16,7 +16,7 @@ import com.example.jingbin.cloudreader.bean.book.BooksBean;
 import com.example.jingbin.cloudreader.databinding.FooterItemBookBinding;
 import com.example.jingbin.cloudreader.databinding.HeaderItemBookBinding;
 import com.example.jingbin.cloudreader.databinding.ItemBookBinding;
-import com.example.jingbin.cloudreader.ui.book.child.BookDetailActivity;
+import com.example.jingbin.cloudreader.ui.douban.BookDetailActivity;
 import com.example.jingbin.cloudreader.utils.PerfectClickListener;
 
 import java.util.ArrayList;
@@ -176,7 +176,6 @@ public class BookAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
                     itemView.setVisibility(View.VISIBLE);
                     break;
                 case LOAD_NONE:
-                    System.out.println("LOAD_NONE----");
                     mBindFooter.progress.setVisibility(View.GONE);
                     mBindFooter.tvLoadPrompt.setText("没有更多内容了");
                     break;

@@ -15,11 +15,12 @@ import com.example.jingbin.cloudreader.utils.CommonUtils;
 import com.example.jingbin.cloudreader.utils.PerfectClickListener;
 import com.example.jingbin.cloudreader.utils.UpdateUtil;
 import com.example.jingbin.cloudreader.view.webview.WebViewActivity;
+import com.example.jingbin.cloudreader.viewmodel.menu.NoViewModel;
 
 /**
  * @author jingbin
  */
-public class NavAboutActivity extends BaseActivity<ActivityNavAboutBinding> {
+public class NavAboutActivity extends BaseActivity<NoViewModel, ActivityNavAboutBinding> {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -32,10 +33,12 @@ public class NavAboutActivity extends BaseActivity<ActivityNavAboutBinding> {
 
         // 直接写在布局文件里会很耗内存
         Glide.with(this).load(R.drawable.ic_cloudreader).into(bindingView.ivIcon);
-        bindingView.tvGankio.getPaint().setFlags(Paint.UNDERLINE_TEXT_FLAG); //下划线
+        bindingView.tvGankio.getPaint().setFlags(Paint.UNDERLINE_TEXT_FLAG);
         bindingView.tvGankio.getPaint().setAntiAlias(true);//抗锯齿
-        bindingView.tvDouban.getPaint().setFlags(Paint.UNDERLINE_TEXT_FLAG); //下划线
+        bindingView.tvDouban.getPaint().setFlags(Paint.UNDERLINE_TEXT_FLAG);
         bindingView.tvDouban.getPaint().setAntiAlias(true);//抗锯齿
+        bindingView.tvWanandroid.getPaint().setFlags(Paint.UNDERLINE_TEXT_FLAG);
+        bindingView.tvWanandroid.getPaint().setAntiAlias(true);//抗锯齿
 
         initListener();
     }
@@ -45,7 +48,8 @@ public class NavAboutActivity extends BaseActivity<ActivityNavAboutBinding> {
         bindingView.tvDouban.setOnClickListener(listener);
         bindingView.tvAboutStar.setOnClickListener(listener);
         bindingView.tvFunction.setOnClickListener(listener);
-//        bindingView.tvNewVersion.setOnClickListener(listener);
+        bindingView.tvWanandroid.setOnClickListener(listener);
+        bindingView.tvDownloadUrl.setOnClickListener(listener);
     }
 
     private PerfectClickListener listener = new PerfectClickListener() {
@@ -66,13 +70,17 @@ public class NavAboutActivity extends BaseActivity<ActivityNavAboutBinding> {
                     url = CommonUtils.getString(R.string.string_url_cloudreader);
                     title = "CloudReader";
                     break;
-                case R.id.tv_function:// 更新日志
+                case R.id.tv_function:
                     url = CommonUtils.getString(R.string.string_url_update_log);
                     title = "更新日志";
                     break;
-                case R.id.tv_new_version:// 检查更新
+                case R.id.tv_download_url:
                     url = CommonUtils.getString(R.string.string_url_new_version);
-                    title = "检查更新";
+                    title = "云阅 - fir.im";
+                    break;
+                case R.id.tv_wanandroid:
+                    url = CommonUtils.getString(R.string.string_url_wanandroid);
+                    title = "玩Android";
                     break;
                 default:
                     break;
@@ -87,6 +95,6 @@ public class NavAboutActivity extends BaseActivity<ActivityNavAboutBinding> {
     }
 
     public void checkUpdate(View view) {
-        UpdateUtil.check(this,true);
+        UpdateUtil.check(this, true);
     }
 }

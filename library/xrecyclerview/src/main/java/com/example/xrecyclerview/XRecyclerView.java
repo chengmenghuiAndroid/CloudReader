@@ -77,9 +77,7 @@ public class XRecyclerView extends RecyclerView {
      */
     public void clearHeader() {
         mHeaderViews.clear();
-        final float scale = getContext().getResources().getDisplayMetrics().density;
-        int height = (int) (1.0f * scale + 0.5f);
-        ViewGroup.LayoutParams params = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, height);
+        ViewGroup.LayoutParams params = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1);
         View view = new View(getContext());
         view.setLayoutParams(params);
         mHeaderViews.put(0, view);
@@ -169,10 +167,12 @@ public class XRecyclerView extends RecyclerView {
 
                 View footView = mFootViews.get(0);
                 isLoadingData = true;
-                if (footView instanceof LoadingMoreFooter) {
-                    ((LoadingMoreFooter) footView).setState(LoadingMoreFooter.STATE_LOADING);
-                } else {
-                    footView.setVisibility(View.VISIBLE);
+                if (footView != null) {
+                    if (footView instanceof LoadingMoreFooter) {
+                        ((LoadingMoreFooter) footView).setState(LoadingMoreFooter.STATE_LOADING);
+                    } else {
+                        footView.setVisibility(View.VISIBLE);
+                    }
                 }
                 if (isNetWorkConnected(getContext())) {
                     mLoadingListener.onLoadMore();
@@ -359,5 +359,12 @@ public class XRecyclerView extends RecyclerView {
         if (footView instanceof LoadingMoreFooter) {
             ((LoadingMoreFooter) footView).reSet();
         }
+    }
+
+    /**
+     * 是否在刷新数据
+     */
+    public boolean isLoadingData() {
+        return isLoadingData;
     }
 }

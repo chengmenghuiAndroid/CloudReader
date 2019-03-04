@@ -1,8 +1,11 @@
 package com.example.jingbin.cloudreader.base;
 
+import android.arch.lifecycle.AndroidViewModel;
+import android.arch.lifecycle.ViewModelProviders;
 import android.databinding.DataBindingUtil;
 import android.databinding.ViewDataBinding;
 import android.graphics.drawable.AnimationDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.support.annotation.LayoutRes;
 import android.support.v7.app.ActionBar;
@@ -10,31 +13,35 @@ import android.support.v7.app.AppCompatActivity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewStub;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 
 import com.example.jingbin.cloudreader.R;
 import com.example.jingbin.cloudreader.databinding.ActivityBaseBinding;
+import com.example.jingbin.cloudreader.utils.ClassUtil;
 import com.example.jingbin.cloudreader.utils.CommonUtils;
 import com.example.jingbin.cloudreader.utils.PerfectClickListener;
 import com.example.jingbin.cloudreader.view.statusbar.StatusBarUtil;
 
-import rx.Subscription;
-import rx.subscriptions.CompositeSubscription;
+import io.reactivex.disposables.CompositeDisposable;
+import io.reactivex.disposables.Disposable;
 
 /**
- * Created by jingbin on 16/12/10.
+ * @author jingbin
+ * @date 16/12/10
  */
-public class BaseActivity<SV extends ViewDataBinding> extends AppCompatActivity {
+public abstract class BaseActivity<VM extends AndroidViewModel, SV extends ViewDataBinding> extends AppCompatActivity {
 
+    // ViewModel
+    protected VM viewModel;
     // 布局view
     protected SV bindingView;
-    private LinearLayout llProgressBar;
     private View refresh;
+    private View loadingView;
     private ActivityBaseBinding mBaseBinding;
     private AnimationDrawable mAnimationDrawable;
-    private CompositeSubscription mCompositeSubscription;
+    private CompositeDisposable mCompositeDisposable;
 
     protected <T extends View> T getView(int id) {
         return (T) findViewById(id);
@@ -59,10 +66,10 @@ public class BaseActivity<SV extends ViewDataBinding> extends AppCompatActivity 
         getWindow().setContentView(mBaseBinding.getRoot());
 
         // 设置透明状态栏，兼容4.4
-        StatusBarUtil.setColor(this, CommonUtils.getColor(R.color.colorTheme),0);
-        llProgressBar = getView(R.id.ll_progress_bar);
+        StatusBarUtil.setColor(this, CommonUtils.getColor(R.color.colorTheme), 0);
+        loadingView = ((ViewStub) findViewById(R.id.vs_loading)).inflate();
         refresh = getView(R.id.ll_error_refresh);
-        ImageView img = getView(R.id.img_progress);
+        ImageView img = loadingView.findViewById(R.id.img_progress);
 
         // 加载动画
         mAnimationDrawable = (AnimationDrawable) img.getDrawable();
@@ -81,6 +88,17 @@ public class BaseActivity<SV extends ViewDataBinding> extends AppCompatActivity 
             }
         });
         bindingView.getRoot().setVisibility(View.GONE);
+        initViewModel();
+    }
+
+    /**
+     * 初始化ViewModel
+     */
+    private void initViewModel() {
+        Class<VM> viewModelClass = ClassUtil.getViewModel(this);
+        if (viewModelClass != null) {
+            this.viewModel = ViewModelProviders.of(this).get(viewModelClass);
+        }
     }
 
     /**
@@ -98,7 +116,11 @@ public class BaseActivity<SV extends ViewDataBinding> extends AppCompatActivity 
         mBaseBinding.toolBar.setNavigationOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                onBackPressed();
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    finishAfterTransition();
+                } else {
+                    onBackPressed();
+                }
             }
         });
     }
@@ -109,8 +131,8 @@ public class BaseActivity<SV extends ViewDataBinding> extends AppCompatActivity 
     }
 
     protected void showLoading() {
-        if (llProgressBar.getVisibility() != View.VISIBLE) {
-            llProgressBar.setVisibility(View.VISIBLE);
+        if (loadingView != null && loadingView.getVisibility() != View.VISIBLE) {
+            loadingView.setVisibility(View.VISIBLE);
         }
         // 开始动画
         if (!mAnimationDrawable.isRunning()) {
@@ -125,8 +147,8 @@ public class BaseActivity<SV extends ViewDataBinding> extends AppCompatActivity 
     }
 
     protected void showContentView() {
-        if (llProgressBar.getVisibility() != View.GONE) {
-            llProgressBar.setVisibility(View.GONE);
+        if (loadingView != null && loadingView.getVisibility() != View.GONE) {
+            loadingView.setVisibility(View.GONE);
         }
         // 停止动画
         if (mAnimationDrawable.isRunning()) {
@@ -141,8 +163,8 @@ public class BaseActivity<SV extends ViewDataBinding> extends AppCompatActivity 
     }
 
     protected void showError() {
-        if (llProgressBar.getVisibility() != View.GONE) {
-            llProgressBar.setVisibility(View.GONE);
+        if (loadingView != null && loadingView.getVisibility() != View.GONE) {
+            loadingView.setVisibility(View.GONE);
         }
         // 停止动画
         if (mAnimationDrawable.isRunning()) {
@@ -163,24 +185,25 @@ public class BaseActivity<SV extends ViewDataBinding> extends AppCompatActivity 
 
     }
 
-    public void addSubscription(Subscription s) {
-        if (this.mCompositeSubscription == null) {
-            this.mCompositeSubscription = new CompositeSubscription();
+    public void addSubscription(Disposable s) {
+        if (this.mCompositeDisposable == null) {
+            this.mCompositeDisposable = new CompositeDisposable();
         }
-        this.mCompositeSubscription.add(s);
+        this.mCompositeDisposable.add(s);
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
-        if (this.mCompositeSubscription != null && mCompositeSubscription.hasSubscriptions()) {
-            this.mCompositeSubscription.unsubscribe();
+        if (this.mCompositeDisposable != null && !mCompositeDisposable.isDisposed()) {
+            // clear 和 dispose的区别是：  disposed = true;
+            this.mCompositeDisposable.clear();
         }
     }
 
-    public void removeSubscription() {
-        if (this.mCompositeSubscription != null && mCompositeSubscription.hasSubscriptions()) {
-            this.mCompositeSubscription.unsubscribe();
+    public void removeDisposable() {
+        if (this.mCompositeDisposable != null && !mCompositeDisposable.isDisposed()) {
+            this.mCompositeDisposable.dispose();
         }
     }
 }

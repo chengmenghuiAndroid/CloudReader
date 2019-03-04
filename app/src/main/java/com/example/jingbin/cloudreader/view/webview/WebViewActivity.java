@@ -1,15 +1,20 @@
 package com.example.jingbin.cloudreader.view.webview;
 
+import android.Manifest;
+import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.ActionBar;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
-import android.text.TextUtils;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -19,21 +24,30 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
 import android.widget.ProgressBar;
-import android.widget.TextSwitcher;
 import android.widget.TextView;
 
 import com.example.http.utils.CheckNetwork;
+import com.example.jingbin.cloudreader.MainActivity;
 import com.example.jingbin.cloudreader.R;
+import com.example.jingbin.cloudreader.app.Constants;
+import com.example.jingbin.cloudreader.data.UserUtil;
+import com.example.jingbin.cloudreader.data.model.CollectModel;
 import com.example.jingbin.cloudreader.utils.BaseTools;
 import com.example.jingbin.cloudreader.utils.CommonUtils;
+import com.example.jingbin.cloudreader.utils.DialogBuild;
+import com.example.jingbin.cloudreader.utils.PermissionHandler;
+import com.example.jingbin.cloudreader.utils.RxSaveImage;
+import com.example.jingbin.cloudreader.utils.SPUtils;
 import com.example.jingbin.cloudreader.utils.ShareUtils;
 import com.example.jingbin.cloudreader.utils.ToastUtil;
 import com.example.jingbin.cloudreader.view.statusbar.StatusBarUtil;
+import com.example.jingbin.cloudreader.view.viewbigimage.ViewBigImageActivity;
 import com.example.jingbin.cloudreader.view.webview.config.FullscreenHolder;
 import com.example.jingbin.cloudreader.view.webview.config.IWebPageView;
 import com.example.jingbin.cloudreader.view.webview.config.ImageClickInterface;
 import com.example.jingbin.cloudreader.view.webview.config.MyWebChromeClient;
 import com.example.jingbin.cloudreader.view.webview.config.MyWebViewClient;
+import com.example.jingbin.cloudreader.viewmodel.wan.WanNavigator;
 
 /**
  * 网页可以处理:
@@ -56,10 +70,9 @@ public class WebViewActivity extends AppCompatActivity implements IWebPageView {
     private String mTitle;
     // 网页链接
     private String mUrl;
-    // 可滚动的title 使用复杂 文字显示有渐变效果，文字两旁没有阴影
-    private TextSwitcher mTsTitle;
     // 可滚动的title 使用简单 没有渐变效果，文字两旁有阴影
     private TextView tvGunTitle;
+    private CollectModel collectModel;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -69,6 +82,14 @@ public class WebViewActivity extends AppCompatActivity implements IWebPageView {
         initTitle();
         initWebView();
         webView.loadUrl(mUrl);
+        getDataFromBrowser(getIntent());
+    }
+
+    private void getIntentData() {
+        if (getIntent() != null) {
+            mTitle = getIntent().getStringExtra("mTitle");
+            mUrl = getIntent().getStringExtra("mUrl");
+        }
     }
 
     private void initTitle() {
@@ -77,7 +98,6 @@ public class WebViewActivity extends AppCompatActivity implements IWebPageView {
         webView = findViewById(R.id.webview_detail);
         videoFullView = findViewById(R.id.video_fullView);
         mTitleToolBar = findViewById(R.id.title_tool_bar);
-        mTsTitle = findViewById(R.id.ts_title);
         tvGunTitle = findViewById(R.id.tv_gun_title);
 
         initToolBar();
@@ -95,42 +115,55 @@ public class WebViewActivity extends AppCompatActivity implements IWebPageView {
         setTitle(mTitle);
     }
 
-    private void initTextSwitch() {
-        mTsTitle.setFactory(() -> {
-            TextView textView = new TextView(this);
-            textView.setTextAppearance(this, R.style.WebTitle);
-            textView.setSingleLine(true);
-            textView.setEllipsize(TextUtils.TruncateAt.MARQUEE);
-            textView.postDelayed(() -> textView.setSelected(true), 1900);
-            return textView;
-        });
-        mTsTitle.setInAnimation(this, android.R.anim.fade_in);
-        mTsTitle.setOutAnimation(this, android.R.anim.fade_out);
-        setTitle(mTitle);
-    }
-
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.webview_menu, menu);
         return true;
     }
 
+    public void setTitle(String mTitle) {
+        tvGunTitle.setText(mTitle);
+    }
+
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         switch (item.getItemId()) {
-            case android.R.id.home:// 返回键
-                onBackPressed();
+            case android.R.id.home:
+                // 返回键
+                handleFinish();
                 break;
-            case R.id.actionbar_share:// 分享到
-                String shareText = mWebChromeClient.getTitle() + mUrl + "（分享自云阅）";
+            case R.id.actionbar_share:
+                // 分享到
+                String shareText = mWebChromeClient.getTitle() + webView.getUrl() + " (分享自云阅)";
                 ShareUtils.share(WebViewActivity.this, shareText);
                 break;
-            case R.id.actionbar_cope:// 复制链接
-                BaseTools.copy(mUrl);
+            case R.id.actionbar_cope:
+                // 复制链接
+                BaseTools.copy(webView.getUrl());
                 ToastUtil.showToast("复制成功");
                 break;
-            case R.id.actionbar_open:// 打开链接
-                BaseTools.openLink(WebViewActivity.this, mUrl);
+            case R.id.actionbar_open:
+                // 打开链接
+                BaseTools.openLink(WebViewActivity.this, webView.getUrl());
+                break;
+            case R.id.actionbar_webview_refresh:
+                // 刷新页面
+                if (webView != null) {
+                    webView.reload();
+                }
+                break;
+            case R.id.actionbar_collect:
+                // 添加到收藏
+                if (UserUtil.isLogin(webView.getContext())) {
+                    if (SPUtils.getBoolean(Constants.IS_FIRST_COLLECTURL, true)) {
+                        DialogBuild.show(webView, "网址不同于文章，相同网址可多次进行收藏，且不会显示收藏状态。", "知道了", (DialogInterface.OnClickListener) (dialog, which) -> {
+                            SPUtils.putBoolean(Constants.IS_FIRST_COLLECTURL, false);
+                            collectUrl();
+                        });
+                    } else {
+                        collectUrl();
+                    }
+                }
                 break;
             default:
                 break;
@@ -138,17 +171,25 @@ public class WebViewActivity extends AppCompatActivity implements IWebPageView {
         return super.onOptionsItemSelected(item);
     }
 
-    private void getIntentData() {
-        if (getIntent() != null) {
-            mTitle = getIntent().getStringExtra("mTitle");
-            mUrl = getIntent().getStringExtra("mUrl");
+    private void collectUrl() {
+        // 收藏
+        if (collectModel == null) {
+            collectModel = new CollectModel();
         }
+        collectModel.collectUrl(webView.getTitle(), webView.getUrl(), new WanNavigator.OnCollectNavigator() {
+            @Override
+            public void onSuccess() {
+                ToastUtil.showToastLong("收藏网址成功");
+            }
+
+            @Override
+            public void onFailure() {
+                ToastUtil.showToastLong("收藏网址失败");
+            }
+        });
     }
 
-    public void setTitle(String mTitle) {
-        tvGunTitle.setText(mTitle);
-    }
-
+    @SuppressLint("SetJavaScriptEnabled")
     private void initWebView() {
         mProgressBar.setVisibility(View.VISIBLE);
         WebSettings ws = webView.getSettings();
@@ -192,6 +233,12 @@ public class WebViewActivity extends AppCompatActivity implements IWebPageView {
         // 与js交互
         webView.addJavascriptInterface(new ImageClickInterface(this), "injectedObject");
         webView.setWebViewClient(new MyWebViewClient(this));
+        webView.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                return handleLongImage();
+            }
+        });
     }
 
     @Override
@@ -284,6 +331,78 @@ public class WebViewActivity extends AppCompatActivity implements IWebPageView {
         }
     }
 
+    /**
+     * 使用singleTask启动模式的Activity在系统中只会存在一个实例。
+     * 如果这个实例已经存在，intent就会通过onNewIntent传递到这个Activity。
+     * 否则新的Activity实例被创建。
+     */
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        getDataFromBrowser(intent);
+    }
+
+    /**
+     * 作为三方浏览器打开
+     * Scheme: https
+     * host: www.jianshu.com
+     * path: /p/1cbaf784c29c
+     * url = scheme + "://" + host + path;
+     */
+    private void getDataFromBrowser(Intent intent) {
+        Uri data = intent.getData();
+        if (data != null) {
+            try {
+                String scheme = data.getScheme();
+                String host = data.getHost();
+                String path = data.getPath();
+//                String text = "Scheme: " + scheme + "\n" + "host: " + host + "\n" + "path: " + path;
+//                Log.e("data", text);
+                String url = scheme + "://" + host + path;
+                webView.loadUrl(url);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    /**
+     * 长按图片事件处理
+     */
+    private boolean handleLongImage() {
+        final WebView.HitTestResult hitTestResult = webView.getHitTestResult();
+        // 如果是图片类型或者是带有图片链接的类型
+        if (hitTestResult.getType() == WebView.HitTestResult.IMAGE_TYPE ||
+                hitTestResult.getType() == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
+            // 弹出保存图片的对话框
+            new AlertDialog.Builder(WebViewActivity.this)
+                    .setItems(new String[]{"查看大图", "保存图片到相册"}, new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            String picUrl = hitTestResult.getExtra();
+                            //获取图片
+//                            Log.e("picUrl", picUrl);
+                            switch (which) {
+                                case 0:
+                                    ViewBigImageActivity.start(WebViewActivity.this, picUrl, picUrl);
+                                    break;
+                                case 1:
+                                    if (!PermissionHandler.isHandlePermission(WebViewActivity.this, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+                                        return;
+                                    }
+                                    RxSaveImage.saveImageToGallery(WebViewActivity.this, picUrl, picUrl);
+                                    break;
+                                default:
+                                    break;
+                            }
+                        }
+                    })
+                    .show();
+            return true;
+        }
+        return false;
+    }
+
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
@@ -299,10 +418,24 @@ public class WebViewActivity extends AppCompatActivity implements IWebPageView {
 
                 //退出网页
             } else {
-                finish();
+                handleFinish();
             }
         }
         return false;
+    }
+
+    /**
+     * 直接通过三方浏览器打开时，回退到首页
+     */
+    public void handleFinish() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            finishAfterTransition();
+        } else {
+            finish();
+        }
+        if (!MainActivity.isLaunch) {
+            MainActivity.start(this);
+        }
     }
 
     @Override
@@ -325,8 +458,10 @@ public class WebViewActivity extends AppCompatActivity implements IWebPageView {
 
     @Override
     protected void onDestroy() {
-        super.onDestroy();
-        videoFullView.removeAllViews();
+        if (videoFullView != null) {
+            videoFullView.clearAnimation();
+            videoFullView.removeAllViews();
+        }
         if (webView != null) {
             webView.loadDataWithBaseURL(null, "", "text/html", "utf-8", null);
             webView.clearHistory();
@@ -340,7 +475,14 @@ public class WebViewActivity extends AppCompatActivity implements IWebPageView {
             webView.setWebViewClient(null);
             webView.destroy();
             webView = null;
+            mProgressBar.clearAnimation();
+            tvGunTitle.clearAnimation();
+            tvGunTitle.clearFocus();
         }
+        if (collectModel != null) {
+            collectModel = null;
+        }
+        super.onDestroy();
     }
 
     /**
